@@ -1,0 +1,1122 @@
+#+TITLE: Training the CNN
+#+PROPERTY: header-args:ipython :session /home/bvr/tmp/kernel-dp-ssh.json :results output
+
+* Tangles
+
+** Functions
+#+BEGIN_SRC python :noweb yes :tangle functions.py
+  <<imports>>
+  <<functions>>
+
+  if __name__ == "__main__" :
+    <<function_tests>>
+
+    pass
+
+#+END_SRC
+
+** Networks
+#+BEGIN_SRC python :noweb yes :tangle networks.py
+  <<imports>>
+  <<nw_imports>>
+
+  <<networks>>
+
+  if __name__ == "__main__" :
+    <<network_test>>
+    pass
+#+END_SRC
+
+** Losses
+#+BEGIN_SRC python :noweb yes :tangle losses.py
+  <<imports>>
+  <<loss_imports>>
+
+  <<losses>>
+
+  if __name__ == "__main__" :
+    <<loss_test>>
+    pass
+#+END_SRC
+
+** Trainer
+#+BEGIN_SRC python :noweb yes :tangle trainer.py
+  <<imports>>
+  <<tr_imports>>
+
+  <<trainer>>
+
+  if __name__ == "__main__" :
+    <<tr_test>>
+    pass
+#+END_SRC
+
+* Imports
+#+BEGIN_SRC ipython :noweb-ref imports
+  import logging as lg
+  lg.basicConfig(level=lg.DEBUG, format="%(levelname)-8s: %(message)s")
+
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC ipython :noweb-ref imports
+  import numpy as np
+  import yajl
+  from argparse import Namespace
+#+END_SRC
+
+#+RESULTS:
+
+* Options
+#+BEGIN_SRC ipython :noweb-ref functions
+  def load_options(options_file) :
+    with open(options_file, 'r') as J :
+      options = yajl.load(J)
+
+    options = Namespace(**options)
+    return options
+#+END_SRC
+
+#+RESULTS:
+
+Usage:
+#+BEGIN_SRC ipython :noweb-ref function_tests
+  options_file = "/home/bvr/code/rivet/sample_options.json"
+  options = load_options(options_file)
+
+  lg.info(options)
+#+END_SRC
+
+#+RESULTS:
+: INFO    : Namespace(distance='euclidean', loss='contrastive', network='resnet18', num_input=2)
+
+* Distance Functions
+
+Pytorch has 
++ Euclidean Distance :: torch.nn.PairwiseDistance
++ Cosine Similarity :: torch.nn.CosineSimilarity
+
+* Loss Functions
+
+Pytorch has:
++ L1 Loss :: torch.nn.L1Loss
++ Classical mean squared error loss :: torch.nn.MSELoss
++ Cross Entropy :: torch.nn.CrossEntropyLoss
++ Negative Log Likelihood Loss :: torch.nn.NLLLoss
++ KLDivergence Loss :: torch.nn.KLDivLoss
++ Binary Cross Entropy :: torch.nn.BCELoss
++ ditto (with logits) :: torch.nn.BCEWithLogitsLoss
++ Triplet Loss :: torch.nn.TripletMarginLoss
+
+
+
+* The =train.py= as earlier
+#+BEGIN_SRC ipython :eval never
+  import logging as lg
+  lg.basicConfig(level=lg.INFO, format='%(levelname)-8s: %(message)s')
+
+  import argparse
+  import os
+  import shutil
+  import time
+  import math
+  import yajl
+
+  import torch
+  import torch.nn as nn
+  import torch.nn.parallel
+  import torch.backends.cudnn as cudnn
+  import torch.distributed as dist
+  import torch.optim
+  import torch.utils.data
+  import torch.utils.data.distributed
+
+  import torchvision
+  import torchvision.transforms as transforms
+  import torchvision.datasets as datasets
+  import torchvision.models as models
+  from torch.utils.data import DataLoader
+
+  from combinations_dataset import combinations_dataset as CD
+  from contrastive_loss import ContrastiveLoss
+
+  from helpers import resnet_siamese, bvr_normalize, siamese_accuracy
+  from helpers import inspect_tensor, adjust_learning_rate, AverageMeter
+  from helpers import save_checkpoint, validate, train, fix_transfer
+  from helpers import transfer_weights
+
+  from parser2 import parser
+
+  best_prec1 = 0
+
+  def main():
+    global best_prec1
+    args = parser.parse_args()
+
+    lg.info('Entered main. Args:\n  %s', str(vars(args)).replace(", '", "\n   '"))
+
+    # model here
+    fc_layers = [128, 1]
+    model = resnet_siamese(
+      torchvision.models.resnet18(), fc_layers).cuda()
+    lg.info('Created model resnet18:\n  %s',
+            str(model).replace('\n', '\n   '))
+
+    # define loss function (criterion) and optimizer
+    criterion = ContrastiveLoss(margin=args.spring_margin)
+
+    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+                  momentum=args.momentum,
+                  weight_decay=args.weight_decay)
+
+    accuracy = siamese_accuracy(margin=args.spring_margin)
+
+    lg.info('Defined loss function and optimizer.')
+
+    # optionally resume from a checkpoint
+    # if args.resume:
+    #   if os.path.isfile(args.resume):
+    #     lg.info("Loading checkpoint '{}'".format(args.resume))
+    #     checkpoint = torch.load(args.resume)
+    #     args.start_epoch = checkpoint['epoch']
+    #     best_prec1 = checkpoint['best_prec1']
+    #     model.load_state_dict(checkpoint['state_dict'])
+    #     optimizer.load_state_dict(checkpoint['optimizer'])
+    #     lg.info("Loaded checkpoint '{}' (epoch {})"
+    #             .format(args.resume, checkpoint['epoch']))
+    #   else:
+    #     lg.warn("No checkpoint found at '{}'".format(args.resume))
+    #     lg.warn('STARTING FROM SCRATCH!!! ')
+
+    # elif args.tr :
+    if args.tr :
+      lg.info('Transfer Learning...')
+      if os.path.isfile(args.tr) :
+        lg.info('Loading pretrained weights: %s', args.tr)
+        transfer_weights(model, args.tr)
+        lg.info('Loaded pretrained weights: %s', args.tr)
+      else :
+        lg.warn('No checkpoint found at `%s\'', args.tr)
+        lg.warn('STARTING FROM SCRATCH!!! ')
+
+    cudnn.benchmark = True
+
+    ## Data Transformations 
+    T = transforms.Compose([
+      transforms.Grayscale(3),
+      transforms.RandomHorizontalFlip(),
+      transforms.RandomVerticalFlip(),
+      transforms.Resize(224),
+      transforms.RandomCrop(224),
+      transforms.ToTensor(),
+      transforms.Lambda(lambda x: 255 - x)
+    ])
+
+    # ## Data Loading and Testing
+    # if args.evaluate:
+
+    #   with open(args.data, 'r') as F :
+    #     val_loader = yajl.load(F)['test']
+
+    #   val_loader = DataLoader(
+    #     ds_sketches(val_loader, transform=T, fac_pos=args.prob_similar),
+    #     batch_size = args.batch_size,
+    #     shuffle = False,
+    #     num_workers = args.num_workers
+    #   )
+
+    #   validate(val_loader, model, criterion, accuracy, args)
+    #   return
+
+    ## Data Loading for Training 
+    with open(args.combinations_json, 'r') as J :
+      combinations_list = yajl.load(J)
+    lg.info('Loaded combinations_list: size:%s',
+            len(combinations_list))
+
+    with open(args.images_list_json, 'r') as J :
+      images_list = yajl.load(J)[args.images_list_key]
+    lg.info('Loaded image_list: size:%s', len(images_list))
+
+    train_loader = DataLoader(
+      CD(combinations_list, images_list,
+         transform=T),# fac_pos=args.prob_similar),
+      batch_size = args.batch_size,
+      shuffle = True,
+      num_workers = args.num_workers
+    )
+    # val_loader = DataLoader(
+    #   ds_sketches(data['val'], transform=T, fac_pos=args.prob_similar),
+    #   batch_size = args.batch_size,
+    #   shuffle = False,
+    #   num_workers = args.num_workers
+    # )
+
+    ## Checkpoint Setup
+    save_path = os.path.join(args.save_dir, args.save_filename)
+    save_path_best = os.path.join(args.save_dir, 'model_best.pth.tar')
+    lg.info('Saving training checkpoints at: %s', save_path)
+
+    ## Traning and Validation
+    for epoch in range(args.start_epoch, args.epochs):
+      # if args.distributed:
+      #   train_sampler.set_epoch(epoch)
+      adjust_learning_rate(optimizer, epoch, args.lr, args.lr_decay)
+
+      # fix_transfer
+      if args.tr and args.tr_fix > 0 :
+        fix_transfer(model, epoch, args.tr_fix)
+
+      # train for one epoch
+      prec1 = train(train_loader, model, criterion, optimizer, accuracy, epoch, args)
+
+      # evaluate on validation set
+      # prec1 = validate(val_loader, model, criterion, accuracy, args)
+
+      # remember best prec@1 and save checkpoint
+      is_best = prec1 > best_prec1
+      best_prec1 = max(prec1, best_prec1)
+      save_checkpoint(
+        { 'epoch': epoch + 1,
+          'arch': 'siamese(resnet18+FC%s)' % (tuple(fc_layers),),
+          'state_dict': model.state_dict(),
+          'best_prec1': best_prec1,
+          'optimizer' : optimizer.state_dict(),
+        },
+        is_best,
+        filename=save_path,
+        save_path_best=save_path_best)
+      lg.info('Saving Checkpoint... Done')
+
+  if __name__ == '__main__':
+    main()
+#+END_SRC
+
+* Pytorch Identity Module
+#+BEGIN_SRC ipython :noweb-ref imports
+  from torch.nn import Module
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref functions
+  class Identity(Module) :
+    def forward(self, inputs) :
+      return inputs
+
+
+  lg.info(Identity())
+
+#+END_SRC
+
+#+RESULTS:
+: INFO    : Identity()
+
+
+* The Networks
+
+#+BEGIN_SRC ipython 
+  class resnet_base(nn.Module) :
+    def __init__(self, resnet, weights_file, fc=Identity) :
+      super().__init__()
+      self.resnet = resnet
+      self.fc = fc
+      self.weights_file = weights_file
+      self.load_weights()
+      self.assign_fc()
+
+    def load_weights(self) :
+      weights = torch.load(self.weights_file)
+      pretrained = weigths['state_dict']
+      pretrained = {k: pretrained[k]
+                    for k in pretrained
+                    if 'fc' not in k}
+
+      resnet = models.resnet18()
+      resnet.load_state_dict(pretrained, strict=False)
+      resnet.eval()
+      resnet.cuda()
+
+      self.resnet = resnet
+
+    def assign_fc(self) :
+      fc_out = self.fc
+      fc_in = [512] + fc_out[:-1]
+      self.resnet.fc = torch.nn.Sequential(*[
+        torch.nn.Linear(in_size, out_size)
+        for in_size, out_size in zip(fc_in, fc_out)
+      ])
+
+#+END_SRC
+
+#+BEGIN_SRC ipython 
+  class resnet_feature_pair(resnet_base) :
+    def __init__(self, *args, **kwargs) :
+      super().__init__(*args, **kwargs)
+
+    def forward(self, inputs) :
+      x1, x2 = inputs
+      return self.resnet(x1), self.resnet(x2)
+
+#+END_SRC
+
+#+BEGIN_SRC ipython 
+  class resnet_feature_triple(nn.Module) :
+    def __init__(self, *args, **kwargs) :
+      super().__init__()
+      self.network_setup()
+
+    def network_setup(self, *args, **kwargs) :
+      self.resnet = resnet_feature_pair(*args, **kwargs).resnet
+
+    def forward(self, inputs) :
+      x, x_plus, x_minus = inputs
+      return (self.resnet(x),
+              self.resnet(x_plus),
+              self.resnet(x_minus))
+
+#+END_SRC
+
+#+BEGIN_SRC ipython 
+  class resnet_concat_pair(resnet_base) :
+    def __init__(self, *args, **kwargs) :
+      super().__init__(*args, **kwargs)
+
+    def forward(self, intputs) :
+      pass
+
+#+END_SRC
+
+#+BEGIN_SRC ipython 
+  class resnet_concat_triple(nn.Module) :
+    def __init__(self, *args, **kwargs) :
+      super().__init__()
+      self.network_setup(*args, **kwargs)
+
+    def network_setup(self, *args, **kwargs) :
+      pass
+
+    def forward(self, inputs) :
+      pass
+
+#+END_SRC
+
+* The Networks2
+
+#+BEGIN_SRC ipython :noweb-ref nw_imports
+  import torch
+  from torch import nn
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref networks
+  class pair_feat(nn.Module) :
+    def __init__(self, network) :
+      super().__init__()
+      self.network = network
+
+    def forward(inputs) :
+      x1, x2 = inputs
+      return self.network(x1), self.network(x2)
+  
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref networks
+  class triple_feat(nn.Module) :
+    def __init__(self, network) :
+      super().__init__()
+      self.network = network
+
+    def forward(inputs) :
+      x, x_pos, x_neg = inputs
+      return self.network(x), self.network(x_pos), self.network(x_neg)
+  
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref networks
+  class pair_xent(nn.Module) :
+    def __init__(self, network, fc,
+                 feat_length=512) :
+      self.network = network
+      fc_out = fc
+      fc_in = [feat_length] + fc_out[:-1]
+      self.fc = nn.Sequential(*[
+        nn.Linear(in_size, out_size)
+        for in_size, out_size in zip(fc_in, fc_out)
+      ])
+
+    def forward(inputs) :
+      x1, x2 = inputs
+      y1, y2 = self.network(x1), self.network(x2)
+      new_x = torch.concat(y1, y2)
+      return self.fc(new_x)
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref networks
+  class triple_concat(nn.Module) :
+    def __init__(self, *args, **kwargs) :
+      super().__init__()
+      self.network = pair_concat(*args, **kwargs)
+
+    def forward(inputs) :
+      x, x_pos, x_neg = inputs
+      y_pos_hat = self.network((x, x_pos))
+      y_neg_hat = self.network((x, x_neg))
+
+      return (y_pos_hat, y_neg_hat)
+
+#+END_SRC
+
+* The Losses
+
+#+BEGIN_SRC ipython :noweb-ref loss_imports
+
+  import torch
+  import torch.nn.functional as F
+
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref losses
+  ## Copied from this gist:
+  #  https://gist.github.com/harveyslash/725fcc68df112980328951b3426c0e0b
+
+  ## Modified to include a distance measure
+
+  class ContrastiveLoss(torch.nn.Module):
+    """
+    Contrastive loss function.
+    Based on:
+    http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+
+    The distance measure is parametrised here. By default uses 
+    squared euclidean distance. Another alternative may be 
+    torch.nn.KLDivLoss - The KLDivergence as the distance metric.
+
+    Labels are binary {0, 1}; 0 means similar, and 1 means dissimilar.
+
+    """
+
+    def __init__(self, margin=4.0,
+                 distance_fn=DistancePowerN(2)):
+      super().__init__()
+      self.distance_fn = distance_fn
+      self.margin = margin
+
+    def forward(self, outputs, label):
+      distance = self.distance_fn(*outputs)
+      loss_contrastive = torch.mean(
+        (1-label) * distance + 
+        (label) * torch.clamp(self.margin - distance, min=0.0))
+
+      return loss_contrastive
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref losses
+  class DistancePowerN(torch.nn.PairwiseDistance) :
+    def __init__(self, power=2, **kwargs) :
+      super().__init__(**kwargs)
+      self.power = power
+
+    def forward(self, x1, x2) :
+      d = super().forward(x1, x2)
+
+      if self.power != 1 :
+        d = torch.pow(d, self.power)
+
+      return d
+
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref losses
+  class TripletLoss(ContrastiveLoss) :
+    '''
+    A sum of Losses over each pair of positive and negative pairs
+
+    The pair loss e.g. ContrastiveLoss
+    '''
+
+    def __init__(self, *args,
+                 label={
+                   'pos': 0,
+                   'neg': 1
+                 },
+                 ,**kwargs):
+      super().__init__(*args, **kwargs)
+      self.label=label
+
+    def forward(self, output, label=None) :
+      if label is None :
+        y_pos, y_neg = self.label
+
+      y_pos, y_neg = label
+      _y, _y_pos, _y_neg = output
+
+      return (super().forward((y, y_pos), y_pos)
+              + super().forward((y, y_neg), y_neg))
+
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref losses
+  def npy_var(x, volatile=False, cuda=True) :
+
+    X = torch.from_numpy(label)
+    if cuda :
+      X = X.cuda()
+
+    return torch.autograd.Variable(X)
+
+  class BCETripletLoss(torch.nn.BCELoss) :
+    def __init__(self, *args,
+                 label=[
+                   np.array([1, 0], dtype=np.float),
+                   np.array([0, 1], dtype=np.float)
+                 ], **kwargs) :
+      super().__init__(*args, **kwargs)
+      self.label = [npy_var(l) for l in label]
+
+    def forward(self, _Y, Y=None) :
+      if Y is None:
+        Y = self.label
+
+      Y_pos, Y_neg = Y
+      _Y_pos, _Y_neg = _Y
+
+      return (super().forward(_Y_pos, Y) 
+              + super().forward(_Y_neg, Y))
+
+#+END_SRC
+
+* The Data
+
+#+BEGIN_SRC python :noweb yes :tangle dataset.py :eval never
+  <<cd_include>>
+  <<cd_class>>
+  if __name__ == '__main__' :
+    <<cd_main>>
+#+END_SRC
+
+** Pairwise
+
+#+BEGIN_SRC ipython :noweb-ref cd_include
+  from PIL import Image
+  from torch.utils.data import Dataset, DataLoader
+
+  import random
+
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC ipython :noweb-ref cd_class
+  class pairwise_dataset(Dataset) :
+    '''Uses image_list and adjacency_list for similar pairs. For each
+    image in similar_pair, randomly generates a dissimilar pair. (1:2)
+    positive to negative samples.
+
+    Labels may be initialized as an ordered pair: 0: similar, 1: dissimilar
+    '''
+
+    def __init__(self, adjacency, image_list,
+                 labels=[0, 1],
+                 transform = None,
+                 dissimilar_fn = None) :
+
+      self.adjacency = adjacency
+      self.image_list = image_list
+      self.labels = labels
+
+      self.transform = transform
+
+      self.dissimilar = dissimilar_fn
+      if self.dissimilar is None :
+        self.dissimilar = self.find_dissimilar
+
+      self.init_pairs()
+
+    def init_pairs(self) :
+      pairs = uniq_edges(self.adjacency) #gives me a numpy array (N, 2)
+      flat_pairs = pairs.reshape([-1])
+      undef = np.full_like(flat_pairs, -1)
+      more_pairs = np.stack([flat_pairs, undef], axis=1)
+      self.pairs = np.concatenate([pairs, more_pairs], axis=0)
+
+    def __len__(self):
+      return len(self.pairs)
+
+    def __getitem__(self, index) :
+      x1, x2 = self.pairs[index]
+      y = int(x2 == -1)
+      if y != 0 :
+        x2 = self.dissimilar(x1)
+
+      y = self.labels[y]
+
+      # lg.info((x1, x2))
+      x1 = self.load_image(x1)
+      x2 = self.load_image(x2)
+
+      if self.transform :
+        x1 = self.transform(x1)
+        x2 = self.transform(x2)
+
+      return y, (x1, x2)
+
+    def find_dissimilar(self, index) :
+      indices = list(range(len(self.adjacency)))
+
+      similar = sorted(self.adjacency[index])
+      for i, ix in enumerate(similar) :
+        indices.pop((ix - i))
+
+      return random.choice(indices)
+
+    def load_image(self, image_index) :
+      image_name = self.image_list[image_index]
+      return Image.open(image_name)
+
+#+END_SRC
+
+#+RESULTS:
+
+** Triplet
+#+BEGIN_SRC ipython :noweb-ref cd_class
+  class triplet_dataset(pairwise_dataset) :
+    '''Uses image_list and adjacency_list for similar pairs. For each
+    image in similar_pair, randomly generates a dissimilar pair. (1:2)
+    positive to negative samples.
+
+    '''
+
+    def __init__(self, *args, **kwargs) :
+      super().__init__(*args, **kwargs)
+
+    def init_pairs(self) :
+      self.pairs = uniq_edges(self.adjacency) #gives me a numpy array (N, 2)
+
+    def __len__(self):
+      return 2 * self.pairs.shape[0]
+
+    def __getitem__(self, index) :
+      i = index // self.pairs.shape[0]
+      index = index % self.pairs.shape[0]
+
+      if i > 0:
+        x_pos, x = self.pairs[index]
+      else :
+        x, x_pos = self.pairs[index]
+
+      x_neg = self.dissimilar(x)
+
+      x = self.load_image(x)
+      x_pos = self.load_image(x_pos)
+      x_neg = self.load_image(x_neg)
+
+      if self.transform :
+        x = self.transform(x)
+        x_pos = self.transform(x_pos)
+        x_neg = self.transform(x_neg)
+
+      return self.labels, (x, x_pos, x_neg)
+
+
+#+END_SRC
+
+#+RESULTS:
+
+** TODO Test this (Include test for triplet)
+<2018-05-27 Sun 13:12>
+
+#+BEGIN_SRC ipython :noweb-ref cd_main
+  # To Test
+  # -----------------------------------
+  # combinations_dataset(similar_pairs, image_list,
+  #                      transform = None,
+  #                      dissimilar_fn = None)
+
+  # Logging:
+  # -----------------------------------
+  import logging as lg
+  lg.basicConfig(level=lg.INFO, format='%(levelname)-8s: %(message)s')
+
+  # With transforms
+  # -----------------------------------
+  from torchvision.transforms import Compose, Grayscale, ToTensor
+  from torchvision.transforms import Resize, RandomCrop
+  T = Compose([Grayscale(), Resize(224), RandomCrop(224), ToTensor()])
+
+  ## Json Loader
+  # -----------------------------------
+  import yajl
+
+  combinations_json = '/home/bvr/data/pytosine/k_nearest/20180526-153919/combinations.json'
+  with open(combinations_json, 'r') as J :
+    similar_pairs = yajl.load(J)
+  lg.info('Loaded similar pairs: size:%s', len(similar_pairs))
+
+  adjacency = edge_to_adjacency(similar_pairs)
+  # TODO: include edge_to_adjacency before tangle
+
+  image_list_json = '/home/bvr/data/pytosine/k_nearest/20180521-205730/image_list.json'
+  image_list_key = 'image_list'
+  with open(image_list_json, 'r') as J :
+    image_list = yajl.load(J)[image_list_key]
+  lg.info('Loaded image_list: size:%s', len(image_list))
+
+  def test_dataset(dataset_name) :
+    global adjacency, image_list, T
+
+    dataset = dataset_name(
+      adjacency, image_list,
+      transform = T,
+      labels=[np.array([1, 0]), np.array([0, 1])])
+
+    dataloader = DataLoader(
+      dataset, shuffle=True, batch_size = 64
+    )
+
+    for i, (y, x) in enumerate(dataloader) :
+      lg.info('sizes: len(y), y[0].size, len(x), x[0].size: %s, %s, %s, %s',
+              len(y), y[0].size(), len(x), x[0].size())
+
+
+  test_dataset(pairwise_dataset)
+  test_dataset(triplet_dataset)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+INFO    : Loaded similar pairs: size:108
+INFO    : Loaded image_list: size:48512
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 64, torch.Size([2]), 2, torch.Size([64, 1, 224, 224])
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 64, torch.Size([2]), 2, torch.Size([64, 1, 224, 224])
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 64, torch.Size([2]), 2, torch.Size([64, 1, 224, 224])
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 64, torch.Size([2]), 2, torch.Size([64, 1, 224, 224])
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 64, torch.Size([2]), 2, torch.Size([64, 1, 224, 224])
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 4, torch.Size([2]), 2, torch.Size([4, 1, 224, 224])
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 64, torch.Size([2, 2]), 3, torch.Size([64, 1, 224, 224])
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 64, torch.Size([2, 2]), 3, torch.Size([64, 1, 224, 224])
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 64, torch.Size([2, 2]), 3, torch.Size([64, 1, 224, 224])
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+DEBUG   : STREAM b'IHDR' 16 13
+DEBUG   : STREAM b'IDAT' 41 8192
+INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3, torch.Size([24, 1, 224, 224])
+#+end_example
+
+#+BEGIN_SRC ipython :noweb-ref cd_include
+  from functools import reduce
+  import operator
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC ipython :noweb-ref cd_functions
+  def flatten(inp_list) :
+    return reduce(operator.concat, inp_list)
+#+END_SRC
+
+
+* The Trainer
+#+BEGIN_SRC ipython :noweb-ref tr_imports
+
+  from argparse import Namespace
+
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref trainer
+  class Trainer :
+    stat_dtype = [('index', 'i4', (2,)),
+                  ('loss', 'f4'),
+                  ('accuracy', 'f4'),
+                  ('t_data', 'f4'),
+                  ('t_batch', 'f4')]
+
+    var = None
+    reporter = None
+    lr_modify = None
+
+    def __init__(self, data, network,
+                 loss, optimizer,
+                 reporter=BvrReporter,
+                 accuracy=BvrAccuracy, # TODO: Create nn.Module
+                 lr_adjuster=None,
+                 net_adjuster=None,
+                 var=None,
+                 mode='train',
+                 options=Namespace(
+                   num_epochs=1,
+                   report_frequency=100
+                 )) :
+      '''
+      To use a python dict for options, use options=Namespace(**py_dict)
+      '''
+      ## Mandatory
+      self.data = data
+      self.network = network
+      self.loss = loss
+      self.optimizer = optimizer
+
+      ## Misc k:v pairs
+      self.options = options
+
+      ## Function / Value based Options
+      self.accuracy = accuracy()
+      self.mode=mode
+      self.var = var
+
+      ## Class based Options 
+      if reporter :
+        self.reporter = reporter(self.stat_dtype)
+
+      if lr_adjuster :
+        self.lr_modify = lr_adjuster(self.optimizer, self.options)
+
+      if net_adjuster :
+        self.net_modify = net_adjuster(self.network, self.options)
+
+    def is_eval_mode(self) :
+      return self.mode == 'eval'
+
+    def is_train_mode(self) :
+      return self.mode == 'train'
+
+    def to_var(self, X, vol=None) :
+      if vol is None :
+        vol = self.is_eval_mode()
+
+      return torch.Autograd.Variable(
+        X.cuda(async=True), volatile=vol
+      )
+
+    def stat_names(self) :
+      return [stat[0] for stat in self.stat_dtype]
+
+    def train(self) :
+      opt = self.options
+      i_max = len(self.data)
+
+      stats = np.ndarray((opt.report_frequency,),
+                         dtype=self.stat_dtype)
+
+      stop_watch = StopWatch()
+      stop_watch.start()
+
+      for j in opt.num_epochs :
+        for i, data in enumerate(self.data) :
+          # adjust learning rate
+          if self.lr_modify :
+            self.lr_modify((j, i))
+
+          # adjust layerwise training
+          if self.net_modify :
+            self.net_modify((j, i))
+
+          train_1((j, i), data)
+
+    def train_1(self, idx, data) :
+      i = idx[-1]
+
+      ## Create variables
+      if self.var :
+        Y, X = self.var(data, self.to_var, self.is_eval_mode())
+      else :
+        Y, X = data
+        Y, X = self.to_var(Y, vol=True), self.to_var(X)
+
+      ## Data Timer
+      t_data = stop_watch.record()
+
+      ## Forward Pass
+      _Y = self.network(X)
+
+      ## Loss and Accuracy
+      loss = self.loss(_Y, Y)
+      accuracy = self.accuracy(_Y, Y)
+
+      ## Backward Pass
+      optimizer.zero_grad()
+      loss.backward()
+      optimizer.step()
+
+      ## Batch Timer
+      t_batch = stop_watch.record()
+
+      ## Record Stats
+      s_i = i % opt.report_frequency
+      stats[s_i] = (
+        idx,
+        loss.data,
+        torch.average(accuracy).data,
+        t_data,
+        t_batch
+      )
+
+      ## Report Stats
+      ii = 1 + i
+      if ii % opt.report_frequency == 0 or ii == i_max :
+        reporter.report(stats[:ii])
+#+END_SRC
+
+
+* KL Divergence Doc from PyTorch
+
+From a [[https://discuss.pytorch.org/t/kullback-leibler-divergence-loss-function-giving-negative-values/763/3][PyTorch Discussion]]
+
+#+BEGIN_EXAMPLE
+  KL divergence is a useful distance measure for continuous
+  distributions and is often useful when performing direct regression
+  over the space of (discretely sampled) continuous output
+  distributions.
+
+  As with NLLLoss, the input given is expected to contain
+  log-probabilities, however unlike ClassNLLLoss, input is not
+  restricted to a 2D Tensor, because the criterion is applied
+  element-wise.
+
+  This criterion expects a target Tensor of the same size as the input
+  Tensor.
+#+END_EXAMPLE

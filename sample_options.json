@@ -1,0 +1,6 @@
+{
+  "loss"	: "contrastive",
+  "num_input"	: 2,
+  "distance"	: "euclidean",
+  "network"	: "resnet18"
+}

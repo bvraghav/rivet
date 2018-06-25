@@ -1,0 +1,64 @@
+
+Archived entries from file /home/bvr/svr/dp/code/rivet/train.org
+
+
+* Options
+:PROPERTIES:
+:ARCHIVE_TIME: 2018-06-16 Sat 13:32
+:ARCHIVE_FILE: ~/svr/dp/code/rivet/train.org
+:ARCHIVE_CATEGORY: train
+:END:
+#+BEGIN_SRC ipython :noweb-ref functions
+  def load_options(options_file) :
+    with open(options_file, 'r') as J :
+      options = yajl.load(J)
+
+    options = Namespace(**options)
+    return options
+#+END_SRC
+
+#+RESULTS:
+
+Usage:
+#+BEGIN_SRC ipython
+  options_file = "/home/bvr/code/rivet/sample_options.json"
+  options = load_options(options_file)
+
+  lg.info(options)
+#+END_SRC
+
+#+RESULTS:
+: INFO    : Namespace(distance='euclidean', loss='contrastive', network='resnet18', num_input=2)
+
+
+Archived entries from file /home/bvr/svr/dp/code/rivet/train.org
+
+
+* Options
+:PROPERTIES:
+:ARCHIVE_TIME: 2018-06-16 Sat 13:32
+:ARCHIVE_FILE: ~/svr/dp/code/rivet/train.org
+:ARCHIVE_CATEGORY: train
+:END:
+#+BEGIN_SRC ipython :noweb-ref functions
+  def load_options(options_file) :
+    with open(options_file, 'r') as J :
+      options = yajl.load(J)
+
+    options = Namespace(**options)
+    return options
+#+END_SRC
+
+#+RESULTS:
+
+Usage:
+#+BEGIN_SRC ipython
+  options_file = "/home/bvr/code/rivet/sample_options.json"
+  options = load_options(options_file)
+
+  lg.info(options)
+#+END_SRC
+
+#+RESULTS:
+: INFO    : Namespace(distance='euclidean', loss='contrastive', network='resnet18', num_input=2)
+

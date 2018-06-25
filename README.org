@@ -1,0 +1,4 @@
+#+TITLE: Project RIVET
+
+This is the code base for a sketch retrieval problem. And named so
+because `RIVET' spans `retrieve'.

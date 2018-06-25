@@ -1,0 +1,141 @@
+#+TITLE: Check Annotations
+#+PROPERTY: header-args:ipython :session /home/bvr/tmp/kernel-cc-ssh.json :results output
+
+* Json DB
+#+BEGIN_SRC ipython
+  import logging as lg
+  lg.basicConfig(level=lg.DEBUG, format='%(levelname)-8s: %(message)s')
+
+  import yajl
+
+  responses_json = "/home/bvr/data/d-skrybe/web-responses/db.json"
+  with open(responses_json, 'r') as J :
+    responses = yajl.load(J)
+
+  responses_ip = [j['ip'] for j in responses]
+  responses_ip = set(responses_ip)
+  lg.info(responses_ip)
+#+END_SRC
+
+#+RESULTS:
+: INFO    : {'172.20.241.77', '172.20.240.57', '172.20.241.123'}
+
+#+BEGIN_SRC ipython
+  import numpy as np
+
+  filter_ip = '172.20.240.57'
+  responses = [j for j in responses if 
+               filter_ip == j['ip'] and
+               np.sum(j['data']) > 1]
+  lg.info(len(responses))
+#+END_SRC
+
+#+RESULTS:
+: INFO    : 1
+
+* Image Indices
+#+BEGIN_SRC ipython
+  lg.info(responses[0].keys())
+#+END_SRC
+
+#+RESULTS:
+: INFO    : dict_keys(['image', 'data', 'timestamp', 'ip'])
+
+#+BEGIN_SRC ipython
+  img_urls = [r['image'] for r in responses]
+
+  lg.info(img_urls)
+#+END_SRC
+
+#+RESULTS:
+: INFO    : ['http://172.28.57.55/~bvr/d-skrybe/img/11287.jpg']
+
+#+BEGIN_SRC ipython
+  prefix = 'http://172.28.57.55/~bvr'
+  p_rep = '/home/bvr/public_html'
+  suffix = 'jpg'
+  s_rep = 'json'
+
+  repl = lambda x: x.replace(prefix, p_rep).replace(suffix, s_rep)
+
+  json_paths = [repl(url) for url in img_urls]
+  lg.info(json_paths)
+#+END_SRC
+
+#+RESULTS:
+: INFO    : ['/home/bvr/public_html/d-skrybe/img/11287.json']
+
+#+BEGIN_SRC ipython
+  with open(json_paths[0], 'r') as J :
+    dummy_json = yajl.load(J)
+
+  lg.info(dummy_json.keys())
+
+#+END_SRC
+
+#+RESULTS:
+: INFO    : dict_keys(['nearest'])
+
+#+BEGIN_SRC ipython
+  def nearest(x):
+    with open(x, 'r') as J:
+      n = yajl.load(J)['nearest']
+
+    return n
+
+  indices_nearest = np.array(
+    [nearest(j) for j in json_paths],
+    dtype=np.int)
+
+  lg.info((indices_nearest.shape, indices_nearest.dtype))
+#+END_SRC
+
+#+RESULTS:
+: INFO    : ((1, 16, 9), dtype('int64'))
+
+* Responses
+#+BEGIN_SRC ipython
+  response_values = np.array(
+    [r['data'] for r in responses],
+    dtype=np.int
+  )
+
+  lg.info((response_values.shape, response_values.dtype))
+#+END_SRC
+
+#+RESULTS:
+: INFO    : ((1, 16, 9), dtype('int64'))
+
+* Show
+#+BEGIN_SRC ipython
+lg.info(response_values)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+INFO    : [[[0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 1 0 1 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]
+  [0 0 0 0 0 0 0 0 0]]]
+#+end_example
+
+* Save
+#+BEGIN_SRC ipython
+  np.save('indices_nearest.npy', indices_nearest)
+  np.save('response_values.npy', response_values)
+
+#+END_SRC
+
+#+RESULTS:
