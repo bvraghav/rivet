@@ -23,7 +23,7 @@ class triple_feat(nn.Module) :
     x, x_pos, x_neg = inputs
     return self.network(x), self.network(x_pos), self.network(x_neg)
 
-class pair_xent(nn.Module) :
+class pair_concat(nn.Module) :
   def __init__(self, network, fc,
                feat_length=512) :
     self.network = network

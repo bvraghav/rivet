@@ -1,0 +1,162 @@
+#+TITLE: Sample Options for Rivet
+#+PROPERTY: header-args :eval never :noweb-ref options :export none
+
+#+BEGIN_SRC js2 :noweb yes :tangle "sample_options.json" :noweb-ref none
+  {
+    <<options>>
+  }
+#+END_SRC
+
+* Network
+
+** Base Network
+#+BEGIN_SRC js2
+  "network"             : "resnet18",
+  "weights_file"        : "/home/bvr/data/pytocone/save-20180427-114144/model_best.pth.tar",
+
+#+END_SRC
+
+** Combining Model (Pairwise/ Triplet)
+
+#+BEGIN_SRC js2
+  "model"               : "feature_pair", 
+  "model_params"        : {
+    "fc"                : null, 
+    "feat_len"          : 512
+  },
+
+#+END_SRC
+
+=model= may be one of:
+#+BEGIN_SRC js2 :export code :noweb-ref none
+  "all_models"          : [ "feature_pair",
+                            "feature_triple",
+                            "concat_pair",
+                            "concat_triple"
+                          ],
+
+#+END_SRC
+
+=fc= stands for fully connected layers. The value may either be =null=
+which is interpreted as =Identity=, or a list of output sizes for a
+series of fully connected layers in an artificial neural network.
+
+For example,
+#+BEGIN_SRC js2 :noweb-ref none :export code
+  "fc" : [128, 2]
+#+END_SRC
+
+=feat_len= is the output size of the base network (expected to be
+flattened).
+
+* Data
+#+BEGIN_SRC js2
+  "dataset"             : "pairwise",
+  "dataset_params"      : {
+    "adjacency"         : "/path/to/adjacency.json",
+    "image_list"        : "/path/to/image_list.json",
+    "labels"            : [0, 1],
+    "transform"         : "sketch_transform"
+  },
+
+  "dataloader_params"   : {
+    "batch_size"        : 256,
+    "shuffle"           : true,
+    "num_workers"       : 7
+  },
+
+#+END_SRC
+
+=dataset= may be one of:
+#+BEGIN_SRC js2 :export code :noweb-ref none
+  "all_dataset"         : [ "pairwise",
+                            "triplet"],
+
+#+END_SRC
+
+* Loss
+#+BEGIN_SRC js2
+  "criterion"           : "contrastive",
+  "criterion_params"    : {
+    "distance"          : "euclidean" 
+  },
+
+#+END_SRC
+
+=criterion= may be one of:
+#+BEGIN_SRC js2 :export code :noweb-ref none
+  "all_criteria"        : [ "contrastive",
+                            "triplet",
+                            "bce",
+                            "bce_triplet"
+                          ],
+#+END_SRC
+
+=distance= may be one of:
+#+BEGIN_SRC js2 :export code :noweb-ref none
+  "all_distances"       : [ "euclidean",
+                            "kldiv"
+                          ],
+#+END_SRC
+where =kldiv= stands for [[https://pytorch.org/docs/stable/nn.html#torch.nn.KLDivLoss][KLDivergence]]
+
+* Optimizer
+#+BEGIN_SRC js2
+  "optimizer"           : "Adam",
+  "optimizer_params"    : {
+    "weight_decay"      : 0.1
+  },
+
+#+END_SRC
+
+=optimizer= may be one of: 
+#+BEGIN_SRC js2 :export code :noweb-ref none
+  "all_optimizers"      : [ "Adadelta",
+                            "Adagrad",
+                            "Adam",
+                            "SparseAdam",
+                            "Adamax",
+                            "ASGD",
+                            "LBFGS",
+                            "RMSprop",
+                            "Rprop",
+                            "SGD"
+                          ],
+
+#+END_SRC
+
+* Learning Rate Adjusters
+#+BEGIN_SRC js2
+  "lr_adjuster"         : "ReduceLROnPlateau",
+  "lr_adjuster_params"  : {
+    "eps"                 : 1e-4
+  },
+
+#+END_SRC
+
+=lr_adjuster= may be one of :
+#+BEGIN_SRC js2 :export code :noweb-ref none
+  "all_lr_adjusters"    : [ "LambdaLR",
+                            "StepLR",
+                            "MultiStepLR",
+                            "ExponentialLR",
+                            "CosineAnnealingLR",
+                            "ReduceLROnPlateau"
+                          ],
+
+#+END_SRC
+
+* Reporting
+#+BEGIN_SRC js2
+  "reporters"           : [ "log_average"
+                          ]
+
+#+END_SRC
+
+=reporters= may once include either of:
+#+BEGIN_SRC js2 :export code :noweb-ref none
+  "all_reporters"       : [ "log_average",
+                            "grapher"
+                          ],
+
+#+END_SRC

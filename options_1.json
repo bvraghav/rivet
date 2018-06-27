@@ -10,8 +10,8 @@
   
   "dataset"             : "pairwise",
   "dataset_params"      : {
-    "adjacency"         : "/path/to/adjacency.json",
-    "image_list"        : "/path/to/image_list.json",
+    "adjacency"         : "/home/bvr/data/rivet/adjacency_bvr.json",
+    "image_list"        : "/home/bvr/data/pytosine/k_nearest/108/128-1/image_list.json",
     "labels"            : [0, 1],
     "transform"         : "sketch_transform"
   },

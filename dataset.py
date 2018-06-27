@@ -5,6 +5,7 @@ import random
 
 from functools import reduce
 import operator
+from torchvision import transforms
 class pairwise_dataset(Dataset) :
   '''Uses image_list and adjacency_list for similar pairs. For each
   image in similar_pair, randomly generates a dissimilar pair. (1:2)
@@ -109,6 +110,33 @@ class triplet_dataset(pairwise_dataset) :
 
     return self.labels, (x, x_pos, x_neg)
 
+
+class Wrapper(object) :
+  def __init__(self, base_module) :
+    self.base_module = base_module
+
+  def __call__(self, adjacency, image_list, labels, transform):
+    with open(adjacency, 'r') as J :
+      adjacency = yajl.load(J)
+
+    with open(image_list, 'r') as J :
+      image_list = yajl.load(J)['image_list']
+
+    transforms = {
+      'sketch_transform': sketch_transform
+    }
+    transform = transforms.get(transform, sketch_transform)
+
+    return self.base_module(adjacency, image_list, labels, transform)
+def flatten(inp_list) :
+  return reduce(operator.concat, inp_list)
+def sketch_transform() :
+  return transforms.Compose([
+    transforms.Resize(224),
+    transforms.RandomCrop(224),
+    transforms.ToTensor(),
+    transforms.Lambda(lambda x: 255 - x)
+  ])
 
 if __name__ == '__main__' :
   # To Test

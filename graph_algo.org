@@ -1,9 +1,17 @@
 #+TITLE: Training the CNN
 #+PROPERTY: header-args:ipython :session /home/bvr/tmp/kernel-dp-ssh.json :results output
 
+#+BEGIN_SRC python :noweb yes :tangle yes :eval never
+<<imports>>
+<<functions>>
+if __name__ == "__main__" :
+  <<main>>
+  pass
+#+END_SRC
+
 * Logging
 
-#+BEGIN_SRC ipython
+#+BEGIN_SRC ipython :noweb-ref main
   import logging as lg
   lg.basicConfig(level=lg.DEBUG, format='%(levelname)-8s: %(message)s')
 #+END_SRC
@@ -13,7 +21,7 @@
 * Adjacency List
 
 #+NAME: adjacency_list
-#+BEGIN_SRC ipython
+#+BEGIN_SRC ipython :noweb-ref main
   # Creating a simple adjacency list for a diamond on string:
   #         *
   #        / \
@@ -37,11 +45,54 @@
 
 * Unique Edges
 
-#+BEGIN_SRC ipython
+#+BEGIN_SRC ipython :noweb-ref imports
   import numpy as np
-  # from copy import deepcopy as clone
+  # import copy
 
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC ipython :noweb-ref functions
   def uniq_edges(adjacency) :
+    adj_view = adjacency
+    if isinstance(adj_view, list) :
+      adj_view = {
+        i: list(l) for (i, l) in enumerate(adj_view)
+      }
+    elif isinstance(adj_view, dict) :
+      adj_view = {
+        int(k): list(adj_view[k]) for k in adj_view
+      }
+    else :
+      raise TypeError("Expected list or dict, but found %s for `adjacency'" % type(adjacency))
+
+    mask = [list(l) for l in adj_view.values()]
+    N = np.sum([len(l) for l in mask]) / 2
+    N = int(N)
+    edges = np.zeros([N, 2], dtype=np.int)
+
+    ei = 0
+    for i, l in adj_view.items() :
+      l = list(l)
+      for j in l :
+        # Remove i from mask
+        lj = adj_view[j]
+        ji = lj.index(i)
+        lj.pop(ji)
+
+        # Append to edges
+        edges[ei] = [i, j]
+        ei += 1
+
+    return edges
+
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC ipython :noweb-ref deprecated :eval never
+  def uniq_edges_1(adjacency) :
     mask = [list(l) for l in adjacency]
     N = np.sum([len(l) for l in mask]) / 2
     N = int(N)
@@ -60,11 +111,12 @@
         ei += 1
 
     return edges
+
 #+END_SRC
 
 #+RESULTS:
 
-#+BEGIN_SRC ipython
+#+BEGIN_SRC ipython :noweb-ref main
   edges = uniq_edges(adjacency)
   lg.info((edges.shape, edges.dtype))
   lg.info(edges)
@@ -79,9 +131,25 @@
 :  [3 4]
 :  [4 5]]
 
+#+BEGIN_SRC ipython :noweb-ref main
+  adj = {'0': [1], '1': [0, 2, 3], '2': [1, 4], '3': [1, 4], '4': [2, 3, 5], '5': [4]}
+  edg = uniq_edges(adj)
+  lg.info((edg.shape, edg.dtype))
+  lg.info(edg)
+#+END_SRC
+
+#+RESULTS:
+: INFO    : ((6, 2), dtype('int64'))
+: INFO    : [[0 1]
+:  [1 2]
+:  [1 3]
+:  [2 4]
+:  [3 4]
+:  [4 5]]
+
 * Edge to Adjacency
 
-#+BEGIN_SRC ipython
+#+BEGIN_SRC ipython :noweb-ref main
   edges = [[0,1],
            [1,2],
            [1,3],
@@ -92,19 +160,28 @@
 
 #+RESULTS:
 
-#+BEGIN_SRC ipython
+#+BEGIN_SRC ipython :noweb-ref functions
   def edge_to_adjacency(edges) :
-    edges = np.array(edges)
+    edges = np.array(edges).tolist()
     # lg.info((edges.shape, edges.dtype))
-    adjacency = [[] for _ in range(1+np.max(edges))]
+    adjacency = {}
 
     for i, j in edges :
       # lg.info((i, j))
-      if j in adjacency[i] :
+      if i in adjacency and j in adjacency[i] :
         continue
 
-      adjacency[i].append(j)
-      adjacency[j].append(i)
+      li = ([j]
+            if str(i) not in adjacency
+            else adjacency[str(i)] + [j])
+      lj = ([i]
+            if str(j) not in adjacency
+            else adjacency[str(j)] + [i])
+
+      adjacency.update({
+        str(i): li,
+        str(j): lj
+      })
 
     return adjacency
 
@@ -113,12 +190,12 @@
 #+RESULTS:
 
 
-#+BEGIN_SRC ipython
+#+BEGIN_SRC ipython :noweb-ref main
   adj = edge_to_adjacency(edges)
   lg.info(adj)
 #+END_SRC
 
 #+RESULTS:
-: INFO    : [[1], [0, 2, 3], [1, 4], [1, 4], [2, 3, 5], [4]]
+: INFO    : {'0': [1], '1': [0, 2, 3], '2': [1, 4], '3': [1, 4], '4': [2, 3, 5], '5': [4]}
 
 

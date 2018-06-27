@@ -73,6 +73,16 @@
 
 #+END_SRC
 
+** Data
+
+#+BEGIN_SRC python :noweb yes :tangle dataset.py :eval never
+  <<cd_include>>
+  <<cd_class>>
+  <<cd_functions>>
+  if __name__ == '__main__' :
+    <<cd_main>>
+#+END_SRC
+
 * Imports
 #+BEGIN_SRC ipython :noweb-ref main_imports
   import logging as lg
@@ -644,13 +654,6 @@ Pytorch has:
 
 * The Data
 
-#+BEGIN_SRC python :noweb yes :tangle dataset.py :eval never
-  <<cd_include>>
-  <<cd_class>>
-  if __name__ == '__main__' :
-    <<cd_main>>
-#+END_SRC
-
 ** Pairwise
 
 #+BEGIN_SRC ipython :noweb-ref cd_include
@@ -1017,6 +1020,43 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
     return reduce(operator.concat, inp_list)
 #+END_SRC
 
+
+** Wrapper
+#+BEGIN_SRC ipython :noweb-ref cd_class
+  class Wrapper(object) :
+    def __init__(self, base_module) :
+      self.base_module = base_module
+
+    def __call__(self, adjacency, image_list, labels, transform):
+      with open(adjacency, 'r') as J :
+        adjacency = yajl.load(J)
+
+      with open(image_list, 'r') as J :
+        image_list = yajl.load(J)['image_list']
+
+      transforms = {
+        'sketch_transform': sketch_transform
+      }
+      transform = transforms.get(transform, sketch_transform)
+
+      return self.base_module(adjacency, image_list, labels, transform)
+#+END_SRC
+
+** Pre Processing
+#+BEGIN_SRC ipython :noweb-ref cd_include
+  from torchvision import transforms
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref cd_functions
+  def sketch_transform() :
+    return transforms.Compose([
+      transforms.Resize(224),
+      transforms.RandomCrop(224),
+      transforms.ToTensor(),
+      transforms.Lambda(lambda x: 255 - x)
+    ])
+
+#+END_SRC
 
 * The Trainer
 #+BEGIN_SRC ipython :noweb-ref tr_imports
