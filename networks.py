@@ -1,6 +1,3 @@
-import logging as lg
-lg.basicConfig(level=lg.DEBUG, format="%(levelname)-8s: %(message)s")
-
 import numpy as np
 import yajl
 from argparse import Namespace
@@ -56,5 +53,8 @@ class triple_concat(nn.Module) :
 
 
 if __name__ == "__main__" :
+  import logging as lg
+  lg.basicConfig(level=lg.DEBUG, format="%(levelname)-8s: %(message)s")
+  
   
   pass

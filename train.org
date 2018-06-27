@@ -6,14 +6,18 @@
 ** Functions
 #+BEGIN_SRC python :noweb yes :tangle functions.py
   <<imports>>
+  <<fn_imports>>
   <<functions>>
 
   if __name__ == "__main__" :
+    <<main_imports>>
     <<function_tests>>
 
     pass
 
 #+END_SRC
+
+#+RESULTS:
 
 ** Networks
 #+BEGIN_SRC python :noweb yes :tangle networks.py
@@ -23,6 +27,7 @@
   <<networks>>
 
   if __name__ == "__main__" :
+    <<main_imports>>
     <<network_test>>
     pass
 #+END_SRC
@@ -35,6 +40,7 @@
   <<losses>>
 
   if __name__ == "__main__" :
+    <<main_imports>>
     <<loss_test>>
     pass
 #+END_SRC
@@ -47,6 +53,7 @@
   <<trainer>>
 
   if __name__ == "__main__" :
+    <<main_imports>>
     <<tr_test>>
     pass
 #+END_SRC
@@ -60,13 +67,14 @@
   <<reporter>>
 
   if __name__ == '__main__' :
+    <<main_imports>>
     <<report_test>>
     pass
 
 #+END_SRC
 
 * Imports
-#+BEGIN_SRC ipython :noweb-ref imports
+#+BEGIN_SRC ipython :noweb-ref main_imports
   import logging as lg
   lg.basicConfig(level=lg.DEBUG, format="%(levelname)-8s: %(message)s")
 
@@ -90,6 +98,7 @@
 
     options = Namespace(**options)
     return options
+
 #+END_SRC
 
 #+RESULTS:
@@ -313,18 +322,17 @@ Pytorch has:
 #+END_SRC
 
 #+BEGIN_SRC ipython :noweb-ref functions
+
   class Identity(Module) :
     def forward(self, inputs) :
       return inputs
 
-
-  lg.info(Identity())
-
 #+END_SRC
 
-#+RESULTS:
-: INFO    : Identity()
-
+#+BEGIN_SRC ipython :noweb-ref function_tests
+  lg.info(Identity())
+ 
+#+END_SRC
 
 * The Networks
 
@@ -446,7 +454,7 @@ Pytorch has:
 #+END_SRC
 
 #+BEGIN_SRC ipython :noweb-ref networks
-  class pair_xent(nn.Module) :
+  class pair_concat(nn.Module) :
     def __init__(self, network, fc,
                  feat_length=512) :
       self.network = network
@@ -476,6 +484,42 @@ Pytorch has:
       y_neg_hat = self.network((x, x_neg))
 
       return (y_pos_hat, y_neg_hat)
+
+#+END_SRC
+
+* The Resnet
+
+#+BEGIN_SRC ipython :noweb-ref fn_imports
+  from torch import nn
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref functions
+  def pretrained_resnet(weights_file, fc=Identity()) :
+    weights = torch.load(weights_file)
+    pretrained = weigths['state_dict']
+    pretrained = {k: pretrained[k]
+                    for k in pretrained
+                    if 'fc' not in k}
+
+    resnet = models.resnet18()
+    resnet.load_state_dict(pretrained, strict=False)
+    resnet.fc = fc
+    resnet.eval()
+    resnet.cuda()
+
+    return resnet
+
+  def create_fc(layers=[128, 1]) :
+    if layers is None :
+      return Identity()
+
+    fc_out = layers
+    fc_in = [512] + fc_out[:-1]
+
+    return nn.Sequential(*[
+      nn.Linear(in_size, out_size)
+      for (in_size, out_size) in zip(fc_in, fc_out)
+    ])
 
 #+END_SRC
 
