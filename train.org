@@ -1093,7 +1093,7 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
   import torch
   from argparse import Namespace
   from reporter import BvrReporter
-  from functions import BvrAccuracy, StopWatch
+  from functions import BvrAccuracy, StopWatch, BvrSaver
 
 #+END_SRC
 
@@ -1108,18 +1108,21 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
 
     var = None
     reporter = None
+    saver = None
 
     def __init__(self, data, network,
                  loss, optimizer,
                  reporter=BvrReporter(stat_dtype),
                  accuracy=BvrAccuracy(), # TODO: Create nn.Module
+                 saver=BvrSaver(),
                  lr_adjuster=None,
                  net_adjuster=None,
                  var=None,
                  mode='train',
                  options=Namespace(
                    num_epochs=1,
-                   report_frequency=100
+                   report_frequency=100,
+                   save_frequency=1
                  )) :
       '''
       To use a python dict for options, use options=Namespace(**py_dict)
@@ -1148,6 +1151,10 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
       ## Stats
       self.stats = np.ndarray((self.options.report_frequency,),
                               dtype=stat_dtype)
+
+      ## Saver
+      if saver :
+        self.saver = saver
 
     def is_eval_mode(self) :
       return self.mode == 'eval'
@@ -1189,7 +1196,12 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
         stop_watch.start()
 
         for i, data in enumerate(self.data) :
-          self.train_1((j, i), data, stop_watch)
+          ii = self.train_1((j, i), data, stop_watch)
+
+        if self.saver :
+          i0 = len(self.data)
+          i0, i1 = j * i0, (1+j) * i0
+          self.saver((i0, i1), self.stats, self.network)
 
     def train_1(self, idx, data, stop_watch) :
       opt = self.options
@@ -1235,6 +1247,7 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
       ii = 1 + i
       if ii % opt.report_frequency == 0 or ii == i_max :
         self.reporter.report(self.stats[:ii])
+
 #+END_SRC
 
 
@@ -1389,3 +1402,83 @@ From a [[https://discuss.pytorch.org/t/kullback-leibler-divergence-loss-function
       return self.time - old
 #+END_SRC
 
+* Saver
+#+BEGIN_SRC ipython :noweb-ref fn_imports
+  import os
+  import shutil
+  from datetime import datetime as Dt
+
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref functions
+  class BvrSaver(object) :
+    options = Namespace(
+        save_frequency = 1,
+        save_location = '.',
+        saver_current = 'checkpoint.pth.tar',
+        saver_best = 'model_best.pth.tar'
+    )
+
+    def __init__(self, options=dict()) :
+      self.count = 0
+      self.best_prec = 0.
+
+      self.update_options(options)
+
+    def update_options(self, options) :
+
+      if isinstance(options, Namespace) :
+        options = vars(options)
+      self.options = vars(self.options)
+
+      # lg.info(self.options)
+      # lg.info(options)
+      self.options.update(options)
+      # lg.info(self.options)
+
+      self.options = Namespace(**self.options)
+
+      self.update_locations()
+
+    def update_locations(self) :
+      self.options.save_location = os.path.join(
+        self.options.save_location,
+        BvrSaver.timestamp()
+      )
+
+      os.makedirs(self.options.save_location)
+
+      self.options.saver_current = os.path.join(
+        self.options.save_location,
+        self.options.saver_current
+      )
+
+      self.options.saver_best = os.path.join(
+        self.options.save_location,
+        self.options.saver_best
+      )
+
+    @staticmethod
+    def timestamp() :
+      return Dt.now().strftime('%Y%m%d-%H%M%S')
+
+    def __call__(self, idx, stats, model) :
+      self.count += 1
+      if self.count < self.options.save_frequency :
+        return
+
+      lg.info("Saving Model")
+      torch.save(model, self.options.saver_current)
+
+      i0, i1 = idx
+      prec = np.mean(stats[i0:i1]['accuracy'])
+    
+      lg.info("idx, prec, best_prec: %s, %s, %s", idx, prec, self.best_prec)
+      if prec > self.best_prec :
+        self.count = 0
+        self.best_prec = prec
+        shutil.copyfile(self.options.saver_current,
+                        self.options.saver_best)
+        lg.info("Saving best model")
+
+#+END_SRC

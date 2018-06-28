@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from functions import load_options, pretrained_resnet, create_fc
-from functions import BvrAccuracy
+from functions import BvrAccuracy, BvrSaver
 
 import dataset
 import networks
@@ -22,7 +22,6 @@ args = parser.parse_args()
 
 ## Load options
 options = load_options(args.options_file)
-
 lg.info(options)
 
 ## Data
@@ -121,6 +120,10 @@ accuracy_transform = accuracy_transforms.get(
 )(**options.accuracy_transform_params)
 accuracy = BvrAccuracy(transform=accuracy_transform)
 
+## Saver
+saver = BvrSaver(options)
+lg.info("Saver Created")
+
 ## Reporting
 reportrs = {
   "log_average": reporter.log_average,
@@ -139,7 +142,9 @@ trainr = trainer.Trainer(
   optimizer = optimizer,
   reporter = reportr,
   accuracy = accuracy,
+  saver = saver,
   lr_adjuster = lr_adjuster,
   options = options
 )
 trainr.train()
+

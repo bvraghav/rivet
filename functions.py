@@ -7,6 +7,10 @@ import torchvision.models as models
 from torch import nn
 import logging as lg
 import time
+import os
+import shutil
+from datetime import datetime as Dt
+
 def load_options(options_file) :
   with open(options_file, 'r') as J :
     options = yajl.load(J)
@@ -50,7 +54,7 @@ class BvrAccuracy(Module) :
   def __init__(self, transform=None):
     super().__init__()
     self.transform = transform
-    lg.info("accuracy: transform: %s", self.transform)
+    # lg.info("accuracy: transform: %s", self.transform)
 
   def forward(self, _Y, Y) :
     # lg.info("size: _Y: %s", _Y.size())
@@ -75,6 +79,76 @@ class StopWatch(object) :
     old = self.time
     self.time = time.time()
     return self.time - old
+class BvrSaver(object) :
+  options = Namespace(
+      save_frequency = 1,
+      save_location = '.',
+      saver_current = 'checkpoint.pth.tar',
+      saver_best = 'model_best.pth.tar'
+  )
+
+  def __init__(self, options=dict()) :
+    self.count = 0
+    self.best_prec = 0.
+
+    self.update_options(options)
+
+  def update_options(self, options) :
+
+    if isinstance(options, Namespace) :
+      options = vars(options)
+    self.options = vars(self.options)
+
+    # lg.info(self.options)
+    # lg.info(options)
+    self.options.update(options)
+    # lg.info(self.options)
+
+    self.options = Namespace(**self.options)
+
+    self.update_locations()
+
+  def update_locations(self) :
+    self.options.save_location = os.path.join(
+      self.options.save_location,
+      BvrSaver.timestamp()
+    )
+
+    os.makedirs(self.options.save_location)
+
+    self.options.saver_current = os.path.join(
+      self.options.save_location,
+      self.options.saver_current
+    )
+
+    self.options.saver_best = os.path.join(
+      self.options.save_location,
+      self.options.saver_best
+    )
+
+  @staticmethod
+  def timestamp() :
+    return Dt.now().strftime('%Y%m%d-%H%M%S')
+
+  def __call__(self, idx, stats, model) :
+    self.count += 1
+    if self.count < self.options.save_frequency :
+      return
+
+    lg.info("Saving Model")
+    torch.save(model, self.options.saver_current)
+
+    i0, i1 = idx
+    prec = np.mean(stats[i0:i1]['accuracy'])
+
+    lg.info("idx, prec, best_prec: %s, %s, %s", idx, prec, self.best_prec)
+    if prec > self.best_prec :
+      self.count = 0
+      self.best_prec = prec
+      shutil.copyfile(self.options.saver_current,
+                      self.options.saver_best)
+      lg.info("Saving best model")
+
 
 if __name__ == "__main__" :
   import logging as lg

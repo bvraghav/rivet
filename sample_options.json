@@ -1,5 +1,8 @@
 {
   "num_epochs"          : 200,
+  "report_frequency"    : 32,
+  "save_frequency"      : 1,
+  
   "network"             : "resnet18",
   "weights_file"        : "/home/bvr/data/pytocone/save-20180427-114144/model_best.pth.tar",
   
@@ -40,6 +43,10 @@
   
   "accuracy_transform"        : "loss_interpreter",
   "accuracy_transform_params" : {},
+  
+  "save_location"       : ".",
+  "saver_current"       : "checkpoint.pth.tar",
+  "saver_best"          : "model_best.pth.tar",
   
   "reporters"           : [ "log_average"
                           ]

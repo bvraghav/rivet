@@ -10,7 +10,14 @@
 * Training
 #+BEGIN_SRC js2
   "num_epochs"          : 200,
+  "report_frequency"    : 32,
+  "save_frequency"      : 1,
+
 #+END_SRC
+
+=save_frequency= represents every n^{th} epoch, when the model is
+checked for being saved.
+
 * Network
 
 ** Base Network
@@ -162,6 +169,14 @@ where =kldiv= stands for [[https://pytorch.org/docs/stable/nn.html#torch.nn.KLDi
 #+BEGIN_SRC js2 :noweb-ref none :exports code
   "all_accuracy_transform" : [ "loss_interpreter"
                              ]
+#+END_SRC
+
+* Saver
+#+BEGIN_SRC js2
+  "save_location"       : ".",
+  "saver_current"       : "checkpoint.pth.tar",
+  "saver_best"          : "model_best.pth.tar",
+
 #+END_SRC
 
 * Reporting

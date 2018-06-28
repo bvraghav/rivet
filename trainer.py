@@ -5,7 +5,7 @@ from torch.nn import Module
 import torch
 from argparse import Namespace
 from reporter import BvrReporter
-from functions import BvrAccuracy, StopWatch
+from functions import BvrAccuracy, StopWatch, BvrSaver
 
 
 stat_dtype = [('index', 'i4', (2,)),
@@ -18,18 +18,21 @@ class Trainer :
 
   var = None
   reporter = None
+  saver = None
 
   def __init__(self, data, network,
                loss, optimizer,
                reporter=BvrReporter(stat_dtype),
                accuracy=BvrAccuracy(), # TODO: Create nn.Module
+               saver=BvrSaver(),
                lr_adjuster=None,
                net_adjuster=None,
                var=None,
                mode='train',
                options=Namespace(
                  num_epochs=1,
-                 report_frequency=100
+                 report_frequency=100,
+                 save_frequency=1
                )) :
     '''
     To use a python dict for options, use options=Namespace(**py_dict)
@@ -58,6 +61,10 @@ class Trainer :
     ## Stats
     self.stats = np.ndarray((self.options.report_frequency,),
                             dtype=stat_dtype)
+
+    ## Saver
+    if saver :
+      self.saver = saver
 
   def is_eval_mode(self) :
     return self.mode == 'eval'
@@ -99,7 +106,12 @@ class Trainer :
       stop_watch.start()
 
       for i, data in enumerate(self.data) :
-        self.train_1((j, i), data, stop_watch)
+        ii = self.train_1((j, i), data, stop_watch)
+
+      if self.saver :
+        i0 = len(self.data)
+        i0, i1 = j * i0, (1+j) * i0
+        self.saver((i0, i1), self.stats, self.network)
 
   def train_1(self, idx, data, stop_watch) :
     opt = self.options
@@ -145,6 +157,7 @@ class Trainer :
     ii = 1 + i
     if ii % opt.report_frequency == 0 or ii == i_max :
       self.reporter.report(self.stats[:ii])
+
 
 if __name__ == "__main__" :
   import logging as lg
