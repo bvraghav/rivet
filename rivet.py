@@ -139,6 +139,7 @@ trainr = trainer.Trainer(
   optimizer = optimizer,
   reporter = reportr,
   accuracy = accuracy,
-  lr_adjuster = lr_adjuster
+  lr_adjuster = lr_adjuster,
+  options = options
 )
 trainr.train()

@@ -1,3 +1,4 @@
+import logging as lg
 import numpy as np
 
 
@@ -16,14 +17,31 @@ def is_int(n) :
   return True      
 
 def log_average(id_range, stats) :
+
+  # lg.info(stats.dtype.fields)
+  # lg.info(stats.dtype.names)
+  # lg.info(stats.dtype.itemsize)
+
   i0, i1 = id_range
   stats = stats[i0:i1]
 
-  stat_mean = np.mean(stats, axis=1)
-  stat_std = np.std(stats, axis=0)
+  indices = [
+    "%s:%s" % (stats[name][0], stats[name][i1-1 - i0])
+    for name in stats.dtype.names
+    if 'index' in name
+  ]
 
-  lg.info(stat_mean)
-  lg.info(stat_std)
+  summary = [
+    "%s:(%s %c %s)" % (name,
+                       np.mean(stats[name]),
+                       chr(177),
+                       np.std(stats[name]))
+    for name in stats.dtype.names
+    if 'index' not in name
+  ]
+
+  lg.info("%s %s", ' '.join(indices), ' '.join(summary))
+
 
 def grapher(id_range, stats) :
   pass

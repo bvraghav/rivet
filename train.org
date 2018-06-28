@@ -1240,6 +1240,7 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
 
 * The Reporter
 #+BEGIN_SRC ipython :noweb-ref report_imports
+  import logging as lg
   import numpy as np
 
 #+END_SRC
@@ -1260,14 +1261,31 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
     return True      
 
   def log_average(id_range, stats) :
+
+    # lg.info(stats.dtype.fields)
+    # lg.info(stats.dtype.names)
+    # lg.info(stats.dtype.itemsize)
+
     i0, i1 = id_range
     stats = stats[i0:i1]
 
-    stat_mean = np.mean(stats, axis=1)
-    stat_std = np.std(stats, axis=0)
+    indices = [
+      "%s:%s" % (stats[name][0], stats[name][i1-1 - i0])
+      for name in stats.dtype.names
+      if 'index' in name
+    ]
 
-    lg.info(stat_mean)
-    lg.info(stat_std)
+    summary = [
+      "%s:(%s %c %s)" % (name,
+                         np.mean(stats[name]),
+                         chr(177),
+                         np.std(stats[name]))
+      for name in stats.dtype.names
+      if 'index' not in name
+    ]
+
+    lg.info("%s %s", ' '.join(indices), ' '.join(summary))
+
 
   def grapher(id_range, stats) :
     pass
@@ -1336,7 +1354,7 @@ From a [[https://discuss.pytorch.org/t/kullback-leibler-divergence-loss-function
     def __init__(self, transform=None):
       super().__init__()
       self.transform = transform
-      lg.info("accuracy: transform: %s", self.transform)
+      # lg.info("accuracy: transform: %s", self.transform)
 
     def forward(self, _Y, Y) :
       # lg.info("size: _Y: %s", _Y.size())

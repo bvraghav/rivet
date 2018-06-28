@@ -1,4 +1,5 @@
 {
+  "num_epochs"          : 200,
   "network"             : "resnet18",
   "weights_file"        : "/home/bvr/data/pytocone/save-20180427-114144/model_best.pth.tar",
   
