@@ -15,6 +15,19 @@ def is_int(n) :
 
   return True      
 
+def log_average(id_range, stats) :
+  i0, i1 = id_range
+  stats = stats[i0:i1]
+
+  stat_mean = np.mean(stats, axis=1)
+  stat_std = np.std(stats, axis=0)
+
+  lg.info(stat_mean)
+  lg.info(stat_std)
+
+def grapher(id_range, stats) :
+  pass
+
 class BvrReporter(object) :
   stats = None
   chunk_size = 1024
@@ -45,21 +58,9 @@ class BvrReporter(object) :
 
     self.stats[i0:i1] = stats
 
-    for consume in queue :
+    for consume in self.queue :
       consume((i0, i1), self.stats)
 
-def log_average(id_range, stats) :
-  i0, i1 = id_range
-  stats = stats[i0:i1]
-
-  stat_mean = np.mean(stats, axis=0)
-  stat_std = np.std(stats, axis=0)
-
-  lg.info(stat_mean)
-  lg.info(stat_std)
-
-def grapher(id_range, stats) :
-  pass
 
 if __name__ == '__main__' :
   import logging as lg

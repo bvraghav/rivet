@@ -146,6 +146,20 @@ where =kldiv= stands for [[https://pytorch.org/docs/stable/nn.html#torch.nn.KLDi
 
 #+END_SRC
 
+* Accuracy
+
+#+BEGIN_SRC ipython 
+  "accuracy_transform"        : "loss_interpreter",
+  "accuracy_transform_params" : {},
+
+#+END_SRC
+
+=accuracy_transform= may be one of:
+#+BEGIN_SRC js2 :noweb-ref none :exports code
+  "all_accuracy_transform" : [ "loss_interpreter"
+                             ]
+#+END_SRC
+
 * Reporting
 #+BEGIN_SRC js2
   "reporters"           : [ "log_average"

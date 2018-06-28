@@ -37,6 +37,9 @@
     "eps"                 : 1e-4
   },
   
+  "accuracy_transform"        : "loss_interpreter",
+  "accuracy_transform_params" : {},
+  
   "reporters"           : [ "log_average"
                           ]
   

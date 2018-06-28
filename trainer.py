@@ -2,25 +2,27 @@ import numpy as np
 import yajl
 from argparse import Namespace
 from torch.nn import Module
-
+import torch
 from argparse import Namespace
+from reporter import BvrReporter
+from functions import BvrAccuracy, StopWatch
 
+
+stat_dtype = [('index', 'i4', (2,)),
+              ('loss', 'f4'),
+              ('accuracy', 'f4'),
+              ('t_data', 'f4'),
+              ('t_batch', 'f4')]
 
 class Trainer :
-  stat_dtype = [('index', 'i4', (2,)),
-                ('loss', 'f4'),
-                ('accuracy', 'f4'),
-                ('t_data', 'f4'),
-                ('t_batch', 'f4')]
 
   var = None
   reporter = None
-  lr_modify = None
 
   def __init__(self, data, network,
                loss, optimizer,
-               reporter=BvrReporter,
-               accuracy=BvrAccuracy, # TODO: Create nn.Module
+               reporter=BvrReporter(stat_dtype),
+               accuracy=BvrAccuracy(), # TODO: Create nn.Module
                lr_adjuster=None,
                net_adjuster=None,
                var=None,
@@ -42,19 +44,20 @@ class Trainer :
     self.options = options
 
     ## Function / Value based Options
-    self.accuracy = accuracy()
+    self.accuracy = accuracy
     self.mode=mode
     self.var = var
 
     ## Class based Options 
     if reporter :
-      self.reporter = reporter(self.stat_dtype)
+      self.reporter = reporter
 
-    if lr_adjuster :
-      self.lr_modify = lr_adjuster(self.optimizer, self.options)
+    self.lr_modify = lr_adjuster
+    self.net_modify = net_adjuster
 
-    if net_adjuster :
-      self.net_modify = net_adjuster(self.network, self.options)
+    ## Stats
+    self.stats = np.ndarray((self.options.report_frequency,),
+                            dtype=stat_dtype)
 
   def is_eval_mode(self) :
     return self.mode == 'eval'
@@ -66,36 +69,41 @@ class Trainer :
     if vol is None :
       vol = self.is_eval_mode()
 
-    return torch.Autograd.Variable(
-      X.cuda(async=True), volatile=vol
-    )
+    if isinstance(X, torch.Tensor) :
+      return torch.autograd.Variable(
+        X.cuda(async=True), volatile=vol
+      )
+
+    if isinstance(X, list) :
+      return [self.to_var(x, vol) for x in X]
+
+    raise TypeError("X in neither a Tensor nor a list of Tensors.")
 
   def stat_names(self) :
-    return [stat[0] for stat in self.stat_dtype]
+    return [stat[0] for stat in stat_dtype]
 
   def train(self) :
     opt = self.options
-    i_max = len(self.data)
 
-    stats = np.ndarray((opt.report_frequency,),
-                       dtype=self.stat_dtype)
+    for j in range(opt.num_epochs) :
 
-    stop_watch = StopWatch()
-    stop_watch.start()
+      # adjust learning rate
+      if self.lr_modify :
+        self.lr_modify.step(j)
 
-    for j in opt.num_epochs :
+      # adjust layerwise training
+      if self.net_modify :
+        self.net_modify(j)
+
+      stop_watch = StopWatch()
+      stop_watch.start()
+
       for i, data in enumerate(self.data) :
-        # adjust learning rate
-        if self.lr_modify :
-          self.lr_modify((j, i))
+        self.train_1((j, i), data, stop_watch)
 
-        # adjust layerwise training
-        if self.net_modify :
-          self.net_modify((j, i))
-
-        train_1((j, i), data)
-
-  def train_1(self, idx, data) :
+  def train_1(self, idx, data, stop_watch) :
+    opt = self.options
+    i_max = len(self.data)
     i = idx[-1]
 
     ## Create variables
@@ -116,19 +124,19 @@ class Trainer :
     accuracy = self.accuracy(_Y, Y)
 
     ## Backward Pass
-    optimizer.zero_grad()
+    self.optimizer.zero_grad()
     loss.backward()
-    optimizer.step()
+    self.optimizer.step()
 
     ## Batch Timer
-    t_batch = stop_watch.record()
+    t_batch = t_data + stop_watch.record()
 
     ## Record Stats
     s_i = i % opt.report_frequency
-    stats[s_i] = (
+    self.stats[s_i] = (
       idx,
       loss.data,
-      torch.average(accuracy).data,
+      accuracy.data,
       t_data,
       t_batch
     )
@@ -136,7 +144,7 @@ class Trainer :
     ## Report Stats
     ii = 1 + i
     if ii % opt.report_frequency == 0 or ii == i_max :
-      reporter.report(stats[:ii])
+      self.reporter.report(self.stats[:ii])
 
 if __name__ == "__main__" :
   import logging as lg

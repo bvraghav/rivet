@@ -441,23 +441,23 @@ Pytorch has:
 
 #+BEGIN_SRC ipython :noweb-ref networks
   class pair_feat(nn.Module) :
-    def __init__(self, network) :
+    def __init__(self, network, **kwargs) :
       super().__init__()
       self.network = network
 
-    def forward(inputs) :
+    def forward(self, inputs) :
       x1, x2 = inputs
-      return self.network(x1), self.network(x2)
+      return torch.stack((self.network(x1), self.network(x2)))
   
 #+END_SRC
 
 #+BEGIN_SRC ipython :noweb-ref networks
   class triple_feat(nn.Module) :
-    def __init__(self, network) :
+    def __init__(self, network, **kwargs) :
       super().__init__()
       self.network = network
 
-    def forward(inputs) :
+    def forward(self, inputs) :
       x, x_pos, x_neg = inputs
       return self.network(x), self.network(x_pos), self.network(x_neg)
   
@@ -475,7 +475,7 @@ Pytorch has:
         for in_size, out_size in zip(fc_in, fc_out)
       ])
 
-    def forward(inputs) :
+    def forward(self, inputs) :
       x1, x2 = inputs
       y1, y2 = self.network(x1), self.network(x2)
       new_x = torch.concat(y1, y2)
@@ -488,7 +488,7 @@ Pytorch has:
       super().__init__()
       self.network = pair_concat(*args, **kwargs)
 
-    def forward(inputs) :
+    def forward(self, inputs) :
       x, x_pos, x_neg = inputs
       y_pos_hat = self.network((x, x_pos))
       y_neg_hat = self.network((x, x_neg))
@@ -500,13 +500,15 @@ Pytorch has:
 * The Resnet
 
 #+BEGIN_SRC ipython :noweb-ref fn_imports
+  import torch
+  import torchvision.models as models
   from torch import nn
 #+END_SRC
 
 #+BEGIN_SRC ipython :noweb-ref functions
   def pretrained_resnet(weights_file, fc=Identity()) :
     weights = torch.load(weights_file)
-    pretrained = weigths['state_dict']
+    pretrained = weights['state_dict']
     pretrained = {k: pretrained[k]
                     for k in pretrained
                     if 'fc' not in k}
@@ -536,9 +538,28 @@ Pytorch has:
 * The Losses
 
 #+BEGIN_SRC ipython :noweb-ref loss_imports
+  import logging as lg
 
   import torch
   import torch.nn.functional as F
+
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref losses
+  class DistancePowerN(torch.nn.PairwiseDistance) :
+    def __init__(self, power=2, **kwargs) :
+      super().__init__(**kwargs)
+      self.power = power
+      # lg.info("DistancePowerN isinstance torch.nn.Module: %s",
+      #         isinstance(self, torch.nn.Module))
+
+    def forward(self, x1, x2) :
+      d = super().forward(x1, x2)
+
+      if self.power != 1 :
+        d = torch.pow(d, self.power)
+
+      return d
 
 #+END_SRC
 
@@ -565,31 +586,26 @@ Pytorch has:
     def __init__(self, margin=4.0,
                  distance_fn=DistancePowerN(2)):
       super().__init__()
+
+      # lg.info("ContrastiveLoss isinstance torch.nn.Module: %s", 
+      #         isinstance(self, torch.nn.Module))
+
       self.distance_fn = distance_fn
       self.margin = margin
 
     def forward(self, outputs, label):
+      # lg.info("len(outputs): %s", len(outputs))
       distance = self.distance_fn(*outputs)
       loss_contrastive = torch.mean(
         (1-label) * distance + 
         (label) * torch.clamp(self.margin - distance, min=0.0))
 
       return loss_contrastive
-#+END_SRC
 
-#+BEGIN_SRC ipython :noweb-ref losses
-  class DistancePowerN(torch.nn.PairwiseDistance) :
-    def __init__(self, power=2, **kwargs) :
-      super().__init__(**kwargs)
-      self.power = power
-
-    def forward(self, x1, x2) :
-      d = super().forward(x1, x2)
-
-      if self.power != 1 :
-        d = torch.pow(d, self.power)
-
-      return d
+    def interpret(self, _Y) :
+      d = self.distance_fn(*_Y)
+      # lg.info("ContrastiveLoss.interpret: d.size(): %s", d.size())
+      return (d > self.margin).float()
 
 #+END_SRC
 
@@ -658,9 +674,12 @@ Pytorch has:
 
 #+BEGIN_SRC ipython :noweb-ref cd_include
   from PIL import Image
+  import torch
   from torch.utils.data import Dataset, DataLoader
 
   import random
+  from graph_algo import uniq_edges
+  import numpy as np
 
 #+END_SRC
 
@@ -682,7 +701,7 @@ Pytorch has:
 
       self.adjacency = adjacency
       self.image_list = image_list
-      self.labels = labels
+      self.labels = torch.tensor(labels).float()
 
       self.transform = transform
 
@@ -721,11 +740,15 @@ Pytorch has:
       return y, (x1, x2)
 
     def find_dissimilar(self, index) :
-      indices = list(range(len(self.adjacency)))
+      indices = set((int(i) for i in self.adjacency.keys()))
 
-      similar = sorted(self.adjacency[index])
-      for i, ix in enumerate(similar) :
-        indices.pop((ix - i))
+      # lg.info("indices(%d): %s", len(list(indices)), sorted(list(indices)))
+      # lg.info("index: %s", index)
+      # lg.info("adjacency(%d): %s", index, self.adjacency[str(index)])
+
+      indices = indices - set(self.adjacency[str(index)] + [int(index)])
+      indices = list(indices)
+      # lg.info("indices(%d): %s", len(indices)), sorted(indices))
 
       return random.choice(indices)
 
@@ -797,6 +820,8 @@ Pytorch has:
   import logging as lg
   lg.basicConfig(level=lg.INFO, format='%(levelname)-8s: %(message)s')
 
+  from graph_algo import edge_to_adjacency
+
   # With transforms
   # -----------------------------------
   from torchvision.transforms import Compose, Grayscale, ToTensor
@@ -809,7 +834,7 @@ Pytorch has:
 
   combinations_json = '/home/bvr/data/pytosine/k_nearest/20180526-153919/combinations.json'
   with open(combinations_json, 'r') as J :
-    similar_pairs = yajl.load(J)
+    similar_pairs = yajl.load(J)['combinations']
   lg.info('Loaded similar pairs: size:%s', len(similar_pairs))
 
   adjacency = edge_to_adjacency(similar_pairs)
@@ -1022,8 +1047,12 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
 
 
 ** Wrapper
+#+BEGIN_SRC ipython :noweb-ref cd_include
+  import yajl
+#+END_SRC
+
 #+BEGIN_SRC ipython :noweb-ref cd_class
-  class Wrapper(object) :
+  class Create(object) :
     def __init__(self, base_module) :
       self.base_module = base_module
 
@@ -1037,7 +1066,7 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
       transforms = {
         'sketch_transform': sketch_transform
       }
-      transform = transforms.get(transform, sketch_transform)
+      transform = transforms.get(transform, sketch_transform)()
 
       return self.base_module(adjacency, image_list, labels, transform)
 #+END_SRC
@@ -1050,6 +1079,7 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
 #+BEGIN_SRC ipython :noweb-ref cd_functions
   def sketch_transform() :
     return transforms.Compose([
+      transforms.Grayscale(3),
       transforms.Resize(224),
       transforms.RandomCrop(224),
       transforms.ToTensor(),
@@ -1060,27 +1090,29 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
 
 * The Trainer
 #+BEGIN_SRC ipython :noweb-ref tr_imports
-
+  import torch
   from argparse import Namespace
+  from reporter import BvrReporter
+  from functions import BvrAccuracy, StopWatch
 
 #+END_SRC
 
 #+BEGIN_SRC ipython :noweb-ref trainer
+  stat_dtype = [('index', 'i4', (2,)),
+                ('loss', 'f4'),
+                ('accuracy', 'f4'),
+                ('t_data', 'f4'),
+                ('t_batch', 'f4')]
+
   class Trainer :
-    stat_dtype = [('index', 'i4', (2,)),
-                  ('loss', 'f4'),
-                  ('accuracy', 'f4'),
-                  ('t_data', 'f4'),
-                  ('t_batch', 'f4')]
 
     var = None
     reporter = None
-    lr_modify = None
 
     def __init__(self, data, network,
                  loss, optimizer,
-                 reporter=BvrReporter,
-                 accuracy=BvrAccuracy, # TODO: Create nn.Module
+                 reporter=BvrReporter(stat_dtype),
+                 accuracy=BvrAccuracy(), # TODO: Create nn.Module
                  lr_adjuster=None,
                  net_adjuster=None,
                  var=None,
@@ -1102,19 +1134,20 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
       self.options = options
 
       ## Function / Value based Options
-      self.accuracy = accuracy()
+      self.accuracy = accuracy
       self.mode=mode
       self.var = var
 
       ## Class based Options 
       if reporter :
-        self.reporter = reporter(self.stat_dtype)
+        self.reporter = reporter
 
-      if lr_adjuster :
-        self.lr_modify = lr_adjuster(self.optimizer, self.options)
+      self.lr_modify = lr_adjuster
+      self.net_modify = net_adjuster
 
-      if net_adjuster :
-        self.net_modify = net_adjuster(self.network, self.options)
+      ## Stats
+      self.stats = np.ndarray((self.options.report_frequency,),
+                              dtype=stat_dtype)
 
     def is_eval_mode(self) :
       return self.mode == 'eval'
@@ -1126,36 +1159,41 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
       if vol is None :
         vol = self.is_eval_mode()
 
-      return torch.Autograd.Variable(
-        X.cuda(async=True), volatile=vol
-      )
+      if isinstance(X, torch.Tensor) :
+        return torch.autograd.Variable(
+          X.cuda(async=True), volatile=vol
+        )
+
+      if isinstance(X, list) :
+        return [self.to_var(x, vol) for x in X]
+
+      raise TypeError("X in neither a Tensor nor a list of Tensors.")
 
     def stat_names(self) :
-      return [stat[0] for stat in self.stat_dtype]
+      return [stat[0] for stat in stat_dtype]
 
     def train(self) :
       opt = self.options
-      i_max = len(self.data)
 
-      stats = np.ndarray((opt.report_frequency,),
-                         dtype=self.stat_dtype)
+      for j in range(opt.num_epochs) :
 
-      stop_watch = StopWatch()
-      stop_watch.start()
+        # adjust learning rate
+        if self.lr_modify :
+          self.lr_modify.step(j)
 
-      for j in opt.num_epochs :
+        # adjust layerwise training
+        if self.net_modify :
+          self.net_modify(j)
+
+        stop_watch = StopWatch()
+        stop_watch.start()
+
         for i, data in enumerate(self.data) :
-          # adjust learning rate
-          if self.lr_modify :
-            self.lr_modify((j, i))
+          self.train_1((j, i), data, stop_watch)
 
-          # adjust layerwise training
-          if self.net_modify :
-            self.net_modify((j, i))
-
-          train_1((j, i), data)
-
-    def train_1(self, idx, data) :
+    def train_1(self, idx, data, stop_watch) :
+      opt = self.options
+      i_max = len(self.data)
       i = idx[-1]
 
       ## Create variables
@@ -1176,19 +1214,19 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
       accuracy = self.accuracy(_Y, Y)
 
       ## Backward Pass
-      optimizer.zero_grad()
+      self.optimizer.zero_grad()
       loss.backward()
-      optimizer.step()
+      self.optimizer.step()
 
       ## Batch Timer
-      t_batch = stop_watch.record()
+      t_batch = t_data + stop_watch.record()
 
       ## Record Stats
       s_i = i % opt.report_frequency
-      stats[s_i] = (
+      self.stats[s_i] = (
         idx,
         loss.data,
-        torch.average(accuracy).data,
+        accuracy.data,
         t_data,
         t_batch
       )
@@ -1196,7 +1234,7 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
       ## Report Stats
       ii = 1 + i
       if ii % opt.report_frequency == 0 or ii == i_max :
-        reporter.report(stats[:ii])
+        self.reporter.report(self.stats[:ii])
 #+END_SRC
 
 
@@ -1220,6 +1258,19 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
       return False
 
     return True      
+
+  def log_average(id_range, stats) :
+    i0, i1 = id_range
+    stats = stats[i0:i1]
+
+    stat_mean = np.mean(stats, axis=1)
+    stat_std = np.std(stats, axis=0)
+
+    lg.info(stat_mean)
+    lg.info(stat_std)
+
+  def grapher(id_range, stats) :
+    pass
 
   class BvrReporter(object) :
     stats = None
@@ -1251,21 +1302,9 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
 
       self.stats[i0:i1] = stats
 
-      for consume in queue :
+      for consume in self.queue :
         consume((i0, i1), self.stats)
 
-  def log_average(id_range, stats) :
-    i0, i1 = id_range
-    stats = stats[i0:i1]
-
-    stat_mean = np.mean(stats, axis=0)
-    stat_std = np.std(stats, axis=0)
-
-    lg.info(stat_mean)
-    lg.info(stat_std)
-
-  def grapher(id_range, stats) :
-    pass
 #+END_SRC
 
 * KL Divergence Doc from PyTorch
@@ -1286,3 +1325,49 @@ From a [[https://discuss.pytorch.org/t/kullback-leibler-divergence-loss-function
   This criterion expects a target Tensor of the same size as the input
   Tensor.
 #+END_EXAMPLE
+
+* Accuracy
+#+BEGIN_SRC ipython :noweb-ref fn_imports
+  import logging as lg
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref functions
+  class BvrAccuracy(Module) :
+    def __init__(self, transform=None):
+      super().__init__()
+      self.transform = transform
+      lg.info("accuracy: transform: %s", self.transform)
+
+    def forward(self, _Y, Y) :
+      # lg.info("size: _Y: %s", _Y.size())
+      # lg.info("size: Y: %s", Y.size())
+
+      if self.transform :
+        # lg.info("callable(self.transform): %s", 
+        #   callable(self.transform))
+        # lg.info("transforming _Y")
+        _Y = self.transform(_Y)
+
+      return torch.mean((_Y == Y).float())
+
+#+END_SRC
+
+* Stop Watch
+#+BEGIN_SRC ipython :noweb-ref fn_imports
+  import time
+#+END_SRC
+
+#+BEGIN_SRC ipython :noweb-ref functions
+  class StopWatch(object) :
+    def __init__(self):
+      self.start()
+
+    def start(self) :
+      self.time = time.time()
+
+    def record(self) :
+      old = self.time
+      self.time = time.time()
+      return self.time - old
+#+END_SRC
+

@@ -1,43 +1,47 @@
 {
-  "network"             : "resnet18",
-  "weights_file"        : "/home/bvr/data/pytocone/save-20180427-114144/model_best.pth.tar",
+  "network"			: "resnet18",
+  "weights_file"		: "/home/bvr/data/pytocone/save-20180427-114144/model_best.pth.tar",
   
-  "model"               : "feature_pair", 
-  "model_params"        : {
-    "fc"                : null, 
-    "feat_len"          : 512
+  "model"			: "feature_pair", 
+  "model_params"		: {
+    "fc"			: null, 
+    "feat_len"			: 512
   },
   
-  "dataset"             : "pairwise",
-  "dataset_params"      : {
-    "adjacency"         : "/home/bvr/data/rivet/adjacency_bvr.json",
-    "image_list"        : "/home/bvr/data/pytosine/k_nearest/108/128-1/image_list.json",
-    "labels"            : [0, 1],
-    "transform"         : "sketch_transform"
+  "dataset"			: "pairwise",
+  "dataset_params"		: {
+    "adjacency"			: "/home/bvr/data/rivet/adjacency_bvr.json",
+    "image_list"		: "/home/bvr/data/pytosine/k_nearest/108/128-1/image_list.json",
+    "labels"			: [0, 1],
+    "transform"			: "sketch_transform"
   },
   
-  "dataloader_params"   : {
-    "batch_size"        : 256,
-    "shuffle"           : true,
-    "num_workers"       : 7
+  "dataloader_params"		: {
+    "batch_size"		: 32,
+    "shuffle"			: true,
+    "num_workers"		: 7
   },
   
-  "criterion"           : "contrastive",
-  "criterion_params"    : {
-    "distance"          : "euclidean" 
+  "criterion"			: "contrastive",
+  "criterion_params"		: {
+    "distance"			: "euclidean" ,
+    "margin"			: 2.0
   },
   
-  "optimizer"           : "Adam",
-  "optimizer_params"    : {
-    "weight_decay"      : 0.1
+  "optimizer"			: "Adam",
+  "optimizer_params"		: {
+    "weight_decay"		: 0.1
   },
   
-  "lr_adjuster"         : "ReduceLROnPlateau",
-  "lr_adjuster_params"  : {
-    "eps"                 : 1e-4
+  "lr_adjuster"			: "ReduceLROnPlateau",
+  "lr_adjuster_params"		: {
+    "eps"			: 1e-4
   },
   
-  "reporters"           : [ "log_average"
-                          ]
+  "accuracy_transform"		: "loss_interpreter",
+  "accuracy_transform_params"	: {},
   
+  "reporters"			: [ "log_average"
+				  ]
+
 }

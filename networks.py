@@ -6,20 +6,20 @@ import torch
 from torch import nn
 
 class pair_feat(nn.Module) :
-  def __init__(self, network) :
+  def __init__(self, network, **kwargs) :
     super().__init__()
     self.network = network
 
-  def forward(inputs) :
+  def forward(self, inputs) :
     x1, x2 = inputs
-    return self.network(x1), self.network(x2)
+    return torch.stack((self.network(x1), self.network(x2)))
 
 class triple_feat(nn.Module) :
-  def __init__(self, network) :
+  def __init__(self, network, **kwargs) :
     super().__init__()
     self.network = network
 
-  def forward(inputs) :
+  def forward(self, inputs) :
     x, x_pos, x_neg = inputs
     return self.network(x), self.network(x_pos), self.network(x_neg)
 
@@ -34,7 +34,7 @@ class pair_concat(nn.Module) :
       for in_size, out_size in zip(fc_in, fc_out)
     ])
 
-  def forward(inputs) :
+  def forward(self, inputs) :
     x1, x2 = inputs
     y1, y2 = self.network(x1), self.network(x2)
     new_x = torch.concat(y1, y2)
@@ -44,7 +44,7 @@ class triple_concat(nn.Module) :
     super().__init__()
     self.network = pair_concat(*args, **kwargs)
 
-  def forward(inputs) :
+  def forward(self, inputs) :
     x, x_pos, x_neg = inputs
     y_pos_hat = self.network((x, x_pos))
     y_neg_hat = self.network((x, x_neg))

@@ -2,7 +2,11 @@ import numpy as np
 import yajl
 from argparse import Namespace
 from torch.nn import Module
+import torch
+import torchvision.models as models
 from torch import nn
+import logging as lg
+import time
 def load_options(options_file) :
   with open(options_file, 'r') as J :
     options = yajl.load(J)
@@ -17,7 +21,7 @@ class Identity(Module) :
 
 def pretrained_resnet(weights_file, fc=Identity()) :
   weights = torch.load(weights_file)
-  pretrained = weigths['state_dict']
+  pretrained = weights['state_dict']
   pretrained = {k: pretrained[k]
                   for k in pretrained
                   if 'fc' not in k}
@@ -42,6 +46,35 @@ def create_fc(layers=[128, 1]) :
     for (in_size, out_size) in zip(fc_in, fc_out)
   ])
 
+class BvrAccuracy(Module) :
+  def __init__(self, transform=None):
+    super().__init__()
+    self.transform = transform
+    lg.info("accuracy: transform: %s", self.transform)
+
+  def forward(self, _Y, Y) :
+    # lg.info("size: _Y: %s", _Y.size())
+    # lg.info("size: Y: %s", Y.size())
+
+    if self.transform :
+      # lg.info("callable(self.transform): %s", 
+      #   callable(self.transform))
+      # lg.info("transforming _Y")
+      _Y = self.transform(_Y)
+
+    return torch.mean((_Y == Y).float())
+
+class StopWatch(object) :
+  def __init__(self):
+    self.start()
+
+  def start(self) :
+    self.time = time.time()
+
+  def record(self) :
+    old = self.time
+    self.time = time.time()
+    return self.time - old
 
 if __name__ == "__main__" :
   import logging as lg

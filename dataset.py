@@ -1,10 +1,14 @@
 from PIL import Image
+import torch
 from torch.utils.data import Dataset, DataLoader
 
 import random
+from graph_algo import uniq_edges
+import numpy as np
 
 from functools import reduce
 import operator
+import yajl
 from torchvision import transforms
 class pairwise_dataset(Dataset) :
   '''Uses image_list and adjacency_list for similar pairs. For each
@@ -21,7 +25,7 @@ class pairwise_dataset(Dataset) :
 
     self.adjacency = adjacency
     self.image_list = image_list
-    self.labels = labels
+    self.labels = torch.tensor(labels).float()
 
     self.transform = transform
 
@@ -60,11 +64,15 @@ class pairwise_dataset(Dataset) :
     return y, (x1, x2)
 
   def find_dissimilar(self, index) :
-    indices = list(range(len(self.adjacency)))
+    indices = set((int(i) for i in self.adjacency.keys()))
 
-    similar = sorted(self.adjacency[index])
-    for i, ix in enumerate(similar) :
-      indices.pop((ix - i))
+    # lg.info("indices(%d): %s", len(list(indices)), sorted(list(indices)))
+    # lg.info("index: %s", index)
+    # lg.info("adjacency(%d): %s", index, self.adjacency[str(index)])
+
+    indices = indices - set(self.adjacency[str(index)] + [int(index)])
+    indices = list(indices)
+    # lg.info("indices(%d): %s", len(indices)), sorted(indices))
 
     return random.choice(indices)
 
@@ -111,7 +119,7 @@ class triplet_dataset(pairwise_dataset) :
     return self.labels, (x, x_pos, x_neg)
 
 
-class Wrapper(object) :
+class Create(object) :
   def __init__(self, base_module) :
     self.base_module = base_module
 
@@ -125,13 +133,14 @@ class Wrapper(object) :
     transforms = {
       'sketch_transform': sketch_transform
     }
-    transform = transforms.get(transform, sketch_transform)
+    transform = transforms.get(transform, sketch_transform)()
 
     return self.base_module(adjacency, image_list, labels, transform)
 def flatten(inp_list) :
   return reduce(operator.concat, inp_list)
 def sketch_transform() :
   return transforms.Compose([
+    transforms.Grayscale(3),
     transforms.Resize(224),
     transforms.RandomCrop(224),
     transforms.ToTensor(),
@@ -150,6 +159,8 @@ if __name__ == '__main__' :
   import logging as lg
   lg.basicConfig(level=lg.INFO, format='%(levelname)-8s: %(message)s')
   
+  from graph_algo import edge_to_adjacency
+  
   # With transforms
   # -----------------------------------
   from torchvision.transforms import Compose, Grayscale, ToTensor
@@ -162,7 +173,7 @@ if __name__ == '__main__' :
   
   combinations_json = '/home/bvr/data/pytosine/k_nearest/20180526-153919/combinations.json'
   with open(combinations_json, 'r') as J :
-    similar_pairs = yajl.load(J)
+    similar_pairs = yajl.load(J)['combinations']
   lg.info('Loaded similar pairs: size:%s', len(similar_pairs))
   
   adjacency = edge_to_adjacency(similar_pairs)
