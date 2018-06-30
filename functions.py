@@ -130,7 +130,7 @@ class BvrSaver(object) :
   def timestamp() :
     return Dt.now().strftime('%Y%m%d-%H%M%S')
 
-  def __call__(self, idx, stats, model) :
+  def __call__(self, model, stats, idx_range) :
     self.count += 1
     if self.count < self.options.save_frequency :
       return
@@ -138,7 +138,7 @@ class BvrSaver(object) :
     lg.info("Saving Model")
     torch.save(model, self.options.saver_current)
 
-    i0, i1 = idx
+    i0, i1 = idx_range
     prec = np.mean(stats[i0:i1]['accuracy'])
 
     lg.info("idx, prec, best_prec: %s, %s, %s", idx, prec, self.best_prec)
