@@ -1473,7 +1473,7 @@ From a [[https://discuss.pytorch.org/t/kullback-leibler-divergence-loss-function
       i0, i1 = idx_range
       prec = np.mean(stats[i0:i1]['accuracy'])
 
-      lg.info("idx, prec, best_prec: %s, %s, %s", idx, prec, self.best_prec)
+      lg.info("idx_range, prec, best_prec: %s, %s, %s", idx_range, prec, self.best_prec)
       if prec > self.best_prec :
         self.count = 0
         self.best_prec = prec
