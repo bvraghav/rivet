@@ -1199,9 +1199,9 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
           ii = self.train_1((j, i), data, stop_watch)
 
         if self.saver :
-          i1 = reporter.cursor
+          i1 = self.reporter.cursor
           i0 = i1 - len(self.data)
-          self.saver(self.network, reporter.stats, (i0, i1))
+          self.saver(self.network, self.reporter.stats, (i0, i1))
 
     def train_1(self, idx, data, stop_watch) :
       opt = self.options
