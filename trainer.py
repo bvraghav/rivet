@@ -109,9 +109,9 @@ class Trainer :
         ii = self.train_1((j, i), data, stop_watch)
 
       if self.saver :
-        i0 = len(self.data)
-        i0, i1 = j * i0, (1+j) * i0
-        self.saver((i0, i1), self.stats, self.network)
+        i1 = reporter.cursor
+        i0 = i1 - len(self.data)
+        self.saver(self.network, reporter.stats, (i0, i1))
 
   def train_1(self, idx, data, stop_watch) :
     opt = self.options

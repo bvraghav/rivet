@@ -1199,9 +1199,9 @@ INFO    : sizes: len(y), y[0].size, len(x), x[0].size: 24, torch.Size([2, 2]), 3
           ii = self.train_1((j, i), data, stop_watch)
 
         if self.saver :
-          i0 = len(self.data)
-          i0, i1 = j * i0, (1+j) * i0
-          self.saver((i0, i1), self.stats, self.network)
+          i1 = reporter.cursor
+          i0 = i1 - len(self.data)
+          self.saver(self.network, reporter.stats, (i0, i1))
 
     def train_1(self, idx, data, stop_watch) :
       opt = self.options
@@ -1460,7 +1460,7 @@ From a [[https://discuss.pytorch.org/t/kullback-leibler-divergence-loss-function
     def timestamp() :
       return Dt.now().strftime('%Y%m%d-%H%M%S')
 
-    def __call__(self, idx, stats, model) :
+    def __call__(self, model, stats, idx_range) :
       self.count += 1
       if self.count < self.options.save_frequency :
         return
@@ -1471,7 +1471,7 @@ From a [[https://discuss.pytorch.org/t/kullback-leibler-divergence-loss-function
       lg.info("Saving Model")
       torch.save(model, self.options.saver_current)
 
-      i0, i1 = idx
+      i0, i1 = idx_range
       prec = np.mean(stats[i0:i1]['accuracy'])
 
       lg.info("idx, prec, best_prec: %s, %s, %s", idx, prec, self.best_prec)
