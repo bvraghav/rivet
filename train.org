@@ -1446,8 +1446,6 @@ From a [[https://discuss.pytorch.org/t/kullback-leibler-divergence-loss-function
         BvrSaver.timestamp()
       )
 
-      os.makedirs(self.options.save_location)
-
       self.options.saver_current = os.path.join(
         self.options.save_location,
         self.options.saver_current
@@ -1467,12 +1465,15 @@ From a [[https://discuss.pytorch.org/t/kullback-leibler-divergence-loss-function
       if self.count < self.options.save_frequency :
         return
 
+      if not os.path.isdir(self.options.save_location) :
+        os.makedirs(self.options.save_location)
+
       lg.info("Saving Model")
       torch.save(model, self.options.saver_current)
 
       i0, i1 = idx
       prec = np.mean(stats[i0:i1]['accuracy'])
-    
+
       lg.info("idx, prec, best_prec: %s, %s, %s", idx, prec, self.best_prec)
       if prec > self.best_prec :
         self.count = 0
