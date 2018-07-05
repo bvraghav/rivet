@@ -2,9 +2,16 @@
 #+PROPERTY: header-args:ipython :session /home/bvr/tmp/kernel-dp-ssh.json :results output
 
 * Tangles
++ The time line for these tangles have been over.
++ No more updates from this org.
++ The development is getting slower.
++ The details are preserved here for historical reason.
++ The name of each tangle has been preserved but without possiblity of
+  a tangle.
 
 ** Functions
-#+BEGIN_SRC python :noweb yes :tangle functions.py
+=functions.py=
+#+BEGIN_SRC python :noweb yes :tangle no
   <<imports>>
   <<fn_imports>>
   <<functions>>
@@ -20,7 +27,8 @@
 #+RESULTS:
 
 ** Networks
-#+BEGIN_SRC python :noweb yes :tangle networks.py
+=networks.py=
+#+BEGIN_SRC python :noweb yes :tangle no
   <<imports>>
   <<nw_imports>>
 
@@ -33,7 +41,8 @@
 #+END_SRC
 
 ** Losses
-#+BEGIN_SRC python :noweb yes :tangle losses.py
+=losses.py=
+#+BEGIN_SRC python :noweb yes :tangle no
   <<imports>>
   <<loss_imports>>
 
@@ -46,7 +55,8 @@
 #+END_SRC
 
 ** Trainer
-#+BEGIN_SRC python :noweb yes :tangle trainer.py
+=trainer.py=
+#+BEGIN_SRC python :noweb yes :tangle no
   <<imports>>
   <<tr_imports>>
 
@@ -59,7 +69,8 @@
 #+END_SRC
 
 ** Reporter
-#+BEGIN_SRC python :noweb yes :tangle reporter.py
+=reporter.py=
+#+BEGIN_SRC python :noweb yes :tangle no
   <<import>>
 
   <<report_imports>>
@@ -74,8 +85,8 @@
 #+END_SRC
 
 ** Data
-
-#+BEGIN_SRC python :noweb yes :tangle dataset.py :eval never
+=dataset.py=
+#+BEGIN_SRC python :noweb yes :tangle no :eval never
   <<cd_include>>
   <<cd_class>>
   <<cd_functions>>
