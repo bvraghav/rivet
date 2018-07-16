@@ -23,9 +23,9 @@ class Identity(Module) :
   def forward(self, inputs) :
     return inputs
 
-def pretrained_resnet(weights_file, fc=Identity()) :
+def pretrained_resnet(weights_file, fc=Identity(), cuda=True, weights_key='state_dict') :
   weights = torch.load(weights_file)
-  pretrained = weights['state_dict']
+  pretrained = weights[weights_key] if weights_key else weights
   pretrained = {k: pretrained[k]
                   for k in pretrained
                   if 'fc' not in k}
@@ -34,7 +34,8 @@ def pretrained_resnet(weights_file, fc=Identity()) :
   resnet.load_state_dict(pretrained, strict=False)
   resnet.fc = fc
   resnet.eval()
-  resnet.cuda()
+  if cuda :
+    resnet.cuda()
 
   return resnet
 
