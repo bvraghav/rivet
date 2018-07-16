@@ -115,8 +115,6 @@ class BvrSaver(object) :
       BvrSaver.timestamp()
     )
 
-    os.makedirs(self.options.save_location)
-
     self.options.saver_current = os.path.join(
       self.options.save_location,
       self.options.saver_current
@@ -135,6 +133,9 @@ class BvrSaver(object) :
     self.count += 1
     if self.count < self.options.save_frequency :
       return
+
+    if not os.path.isdir(self.options.save_location) :
+      os.makedirs(self.options.save_location)
 
     lg.info("Saving Model")
     torch.save(model, self.options.saver_current)
