@@ -96,7 +96,7 @@ def npy_var(x, volatile=False, cuda=True) :
 
   X = torch.from_numpy(label)
   if cuda :
-    X = X.cuda()
+    X = X.cuda(async=True)
 
   return torch.autograd.Variable(X)
 
