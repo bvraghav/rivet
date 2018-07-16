@@ -1,12 +1,14 @@
 {
-  "num_epochs"                  : 200,
+  "cuda"                        : false,
+  "num_epochs"                  : 2,
   "report_frequency"            : 32,
   "save_frequency"              : 1,
 
   "network"			: "resnet18",
-  "weights_file"		: "/home/bvr/data/pytocone/save-20180427-114144/model_best.pth.tar",
+  "weights_file"		: "/home/rvb/data/pretrained/pytorch/resnet18-5c106cde.pth",
+  "weights_key"                 : null,
   
-  "model"			: "feature_pair", 
+  "model"			: "feature_pair",
   "model_params"		: {
     "fc"			: null, 
     "feat_len"			: 512
@@ -14,8 +16,8 @@
   
   "dataset"			: "pairwise",
   "dataset_params"		: {
-    "adjacency"			: "/home/bvr/data/rivet/adjacency_bvr.json",
-    "image_list"		: "/home/bvr/data/pytosine/k_nearest/108/128-1/image_list.json",
+    "adjacency"			: "/home/rvb/data/random/bhagawan_db/bhagawan_rad.json",
+    "image_list"		: "/home/rvb/data/random/bhagawan_db/bhagawan_rim.json",
     "labels"			: [0, 1],
     "transform"			: "sketch_transform"
   },
@@ -45,7 +47,7 @@
   "accuracy_transform"		: "loss_interpreter",
   "accuracy_transform_params"	: {},
   
-  "save_location"               : "/home/bvr/data/rivet/",
+  "save_location"               : "/home/rvb/data/rivet/",
   "saver_current"               : "checkpoint.pth.tar",
   "saver_best"                  : "model_best.pth.tar",
   

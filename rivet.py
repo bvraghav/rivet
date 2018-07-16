@@ -42,7 +42,9 @@ dataloader =  DataLoader(
 ## Pretrained network 
 # TODO: Refactor to generalize
 resnet = lambda: pretrained_resnet(
-  options.weights_file
+  options.weights_file,
+  cuda=options.cuda,
+  weights_key = options.weights_key
 )
 network = {
   "resnet18": resnet

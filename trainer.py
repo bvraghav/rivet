@@ -32,7 +32,8 @@ class Trainer :
                options=Namespace(
                  num_epochs=1,
                  report_frequency=100,
-                 save_frequency=1
+                 save_frequency=1,
+                 cuda=True
                )) :
     '''
     To use a python dict for options, use options=Namespace(**py_dict)
@@ -77,9 +78,7 @@ class Trainer :
       vol = self.is_eval_mode()
 
     if isinstance(X, torch.Tensor) :
-      return torch.autograd.Variable(
-        X.cuda(async=True), volatile=vol
-      )
+      return torch.autograd.Variable(X)
 
     if isinstance(X, list) :
       return [self.to_var(x, vol) for x in X]
@@ -117,6 +116,10 @@ class Trainer :
     opt = self.options
     i_max = len(self.data)
     i = idx[-1]
+
+    if self.options.cuda :
+      X = X.cuda(async=True)
+      Y = Y.cuda(async=True)
 
     ## Create variables
     if self.var :
