@@ -80,6 +80,7 @@ class StopWatch(object) :
     old = self.time
     self.time = time.time()
     return self.time - old
+
 class BvrSaver(object) :
   options = Namespace(
       save_frequency = 1,
@@ -141,6 +142,7 @@ class BvrSaver(object) :
     torch.save(model, self.options.saver_current)
 
     i0, i1 = idx_range
+    # lg.info("Saver __call__: stats.shape: %s", stats.shape)
     prec = np.mean(stats[i0:i1]['accuracy'])
 
     lg.info("idx_range, prec, best_prec: %s, %s, %s", idx_range, prec, self.best_prec)

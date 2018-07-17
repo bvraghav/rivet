@@ -9,6 +9,7 @@
 
 * Training
 #+BEGIN_SRC js2
+  "cuda"                : true,
   "num_epochs"          : 200,
   "report_frequency"    : 32,
   "save_frequency"      : 1,
@@ -90,7 +91,8 @@ flattened).
 #+BEGIN_SRC js2
   "criterion"           : "contrastive",
   "criterion_params"    : {
-    "distance"          : "euclidean" 
+    "distance"          : "euclidean" ,
+    "margin"            : 2.0
   },
 
 #+END_SRC

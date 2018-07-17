@@ -73,11 +73,14 @@ class Trainer :
   def is_train_mode(self) :
     return self.mode == 'train'
 
-  def to_var(self, X, vol=None) :
+  def to_var(self, X, vol=None, cuda=True) :
     if vol is None :
       vol = self.is_eval_mode()
 
     if isinstance(X, torch.Tensor) :
+      if self.options.cuda :
+        X = X.cuda(async=True)
+
       return torch.autograd.Variable(X)
 
     if isinstance(X, list) :
@@ -117,13 +120,10 @@ class Trainer :
     i_max = len(self.data)
     i = idx[-1]
 
-    if self.options.cuda :
-      X = X.cuda(async=True)
-      Y = Y.cuda(async=True)
-
     ## Create variables
     if self.var :
       Y, X = self.var(data, self.to_var, self.is_eval_mode())
+
     else :
       Y, X = data
       Y, X = self.to_var(Y, vol=True), self.to_var(X)

@@ -75,6 +75,7 @@ class BvrReporter(object) :
       self.extend()
 
     self.stats[i0:i1] = stats
+    self.cursor = i1
 
     for consume in self.queue :
       consume((i0, i1), self.stats)
