@@ -5,7 +5,7 @@
 This was necessary for my testing. And for general usage, the last
 line =import losses= should be enough.
 
-#+BEGIN_SRC python :var PYPATH=(file-truename (directory-file-name (file-name-directory (directory-file-name default-directory))))
+#+BEGIN_SRC ipython :var PYPATH=(file-truename (directory-file-name (file-name-directory (directory-file-name default-directory))))
   import logging as lg
   lg.basicConfig(level=lg.DEBUG, format="%(levelname)-8s: %(message)s")
 
@@ -30,7 +30,7 @@ Generalized nth-power of distance with =n=2= by default. Useful with
 distance metrics, which is generally used as squared euclidean
 distance.
 
-#+BEGIN_SRC python
+#+BEGIN_SRC ipython
   import torch
 
   loss = losses.DistancePowerN(power=2)
@@ -59,7 +59,7 @@ distance.
 Literature: [[yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf][Hadsell et al. CVPR 2006]] [[http://yann.lecun.com/exdb/publis/pdf/chopra-05.pdf][Chopra et al. 2005]] And a numerous
 other sources on the internet.
 
-#+BEGIN_SRC python
+#+BEGIN_SRC ipython
   import torch
 
   loss = losses.ContrastiveLoss(margin=1.)
@@ -90,7 +90,7 @@ other sources on the internet.
 
 Using [[https://en.wikipedia.org/wiki/Jensen%25E2%2580%2593Shannon_divergence][JS Divergence]] as a loss.
 
-#+BEGIN_SRC python
+#+BEGIN_SRC ipython
   import torch
   import torch.nn.functional as F
 
@@ -124,7 +124,7 @@ Yet to investigate!
 
 Combining two [[*ContrastiveLoss][Contrastive losses]].
 
-#+BEGIN_SRC python
+#+BEGIN_SRC ipython
   import torch
 
   mu=1.
@@ -159,7 +159,7 @@ Combining two [[*ContrastiveLoss][Contrastive losses]].
 
 Combining two [[https://pytorch.org/docs/stable/nn.html#bceloss][Binary Cross Entropy Losses]] into a triplet.
 
-#+BEGIN_SRC python
+#+BEGIN_SRC ipython
   import torch
 
   loss = losses.BCETripletLoss(cuda=False)
