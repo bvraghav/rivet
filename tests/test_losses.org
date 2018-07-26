@@ -122,7 +122,7 @@ Yet to investigate!
 
 ** TripletLoss
 
-Combining two Contrastive losses.
+Combining two [[*ContrastiveLoss][Contrastive losses]].
 
 #+BEGIN_SRC python
   import torch
@@ -157,7 +157,7 @@ Combining two Contrastive losses.
 
 ** BCETripletLoss
 
-Combining two Binary Cross Entropy Losses into a triplet.
+Combining two [[https://pytorch.org/docs/stable/nn.html#bceloss][Binary Cross Entropy Losses]] into a triplet.
 
 #+BEGIN_SRC python
   import torch
