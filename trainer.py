@@ -1,7 +1,5 @@
 import numpy as np
 import yajl
-from argparse import Namespace
-from torch.nn import Module
 import torch
 from argparse import Namespace
 from reporter import BvrReporter
