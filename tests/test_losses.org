@@ -26,7 +26,11 @@ line =import losses= should be enough.
 
 ** DistancePowerN
 
-#+BEGIN_SRC ipython
+Generalized nth-power of distance with =n=2= by default. Useful with
+distance metrics, which is generally used as squared euclidean
+distance.
+
+#+BEGIN_SRC python
   import torch
 
   loss = losses.DistancePowerN(power=2)
@@ -52,7 +56,10 @@ line =import losses= should be enough.
 
 ** ContrastiveLoss
 
-#+BEGIN_SRC ipython
+Literature: [[yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf][Hadsell et al. CVPR 2006]] [[http://yann.lecun.com/exdb/publis/pdf/chopra-05.pdf][Chopra et al. 2005]] And a numerous
+other sources on the internet.
+
+#+BEGIN_SRC python
   import torch
 
   loss = losses.ContrastiveLoss(margin=1.)
@@ -81,7 +88,9 @@ line =import losses= should be enough.
 
 ** JSDivLoss
 
-#+BEGIN_SRC ipython
+Using [[https://en.wikipedia.org/wiki/Jensen%25E2%2580%2593Shannon_divergence][JS Divergence]] as a loss.
+
+#+BEGIN_SRC python
   import torch
   import torch.nn.functional as F
 
@@ -108,11 +117,14 @@ line =import losses= should be enough.
 : INFO    : tensor(-1.3274)
 : INFO    : tensor(-1.3274)
 
-*** TODO Why is JS Divergence negative? Investigate!
+*** TODO Why is JS Divergence negative? 
+Yet to investigate!
 
 ** TripletLoss
 
-#+BEGIN_SRC ipython
+Combining two Contrastive losses.
+
+#+BEGIN_SRC python
   import torch
 
   mu=1.
@@ -145,7 +157,9 @@ line =import losses= should be enough.
 
 ** BCETripletLoss
 
-#+BEGIN_SRC ipython
+Combining two Binary Cross Entropy Losses into a triplet.
+
+#+BEGIN_SRC python
   import torch
 
   loss = losses.BCETripletLoss(cuda=False)
