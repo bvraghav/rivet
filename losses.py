@@ -7,7 +7,6 @@ import logging as lg
 import torch
 import torch.nn.functional as F
 
-
 class DistancePowerN(torch.nn.PairwiseDistance) :
   def __init__(self, power=2, **kwargs) :
     super().__init__(**kwargs)
@@ -66,6 +65,24 @@ class ContrastiveLoss(torch.nn.Module):
     # lg.info("ContrastiveLoss.interpret: d.size(): %s", d.size())
     return (d > self.margin).float()
 
+class JSDivLoss(Module) :
+  def __init__(self, size_average=True, reduce=True):
+    super().__init__()
+
+    self.size_average = size_average
+    self.reduce = reduce
+
+  def forward(self, input, target) :
+    with torch.no_grad() :
+      z = 0.5 * (input + target)
+
+    return (F.kl_div(input, z,
+                     size_average=self.size_average,
+                     reduce=self.reduce)
+            + F.kl_div(target, z,
+                       size_average=self.size_average,
+                       reduce=self.reduce))
+
 class TripletLoss(ContrastiveLoss) :
   '''
   A sum of Losses over each pair of positive and negative pairs
@@ -84,17 +101,17 @@ class TripletLoss(ContrastiveLoss) :
 
   def forward(self, output, label=None) :
     if label is None :
-      y_pos, y_neg = self.label
+      label = self.label
 
-    y_pos, y_neg = label
+    y_pos, y_neg = label['pos'], label['neg']
     _y, _y_pos, _y_neg = output
 
-    return (super().forward((y, y_pos), y_pos)
-            + super().forward((y, y_neg), y_neg))
+    return (super().forward((_y, _y_pos), y_pos)
+            + super().forward((_y, _y_neg), y_neg))
 
 def npy_var(x, volatile=False, cuda=True) :
 
-  X = torch.from_numpy(label)
+  X = torch.from_numpy(x)
   if cuda :
     X = X.cuda(async=True)
 
@@ -103,22 +120,31 @@ def npy_var(x, volatile=False, cuda=True) :
 class BCETripletLoss(torch.nn.BCELoss) :
   def __init__(self, *args,
                label=[
-                 np.array([1, 0], dtype=np.float),
-                 np.array([0, 1], dtype=np.float)
-               ], **kwargs) :
+                 [1, 0],
+                 [0, 1]
+               ],
+               cuda=True,
+               **kwargs) :
     super().__init__(*args, **kwargs)
-    self.label = [npy_var(l) for l in label]
+    with torch.no_grad() :
+      self.label = torch.FloatTensor(label)
+
+    if cuda : 
+      self.label = self.label.cuda()
 
   def forward(self, _Y, Y=None) :
     if Y is None:
-      Y = self.label
+      Y = self.label.unsqueeze(1).repeat(1, _Y[0].size(0), 1)
+      lg.debug(Y.size())
 
     Y_pos, Y_neg = Y
     _Y_pos, _Y_neg = _Y
 
-    return (super().forward(_Y_pos, Y) 
-            + super().forward(_Y_neg, Y))
+    lg.debug(_Y_pos.size())
+    lg.debug(_Y_neg.size())
 
+    return (super().forward(_Y_pos, Y_pos) 
+            + super().forward(_Y_neg, Y_neg))
 
 if __name__ == "__main__" :
   import logging as lg

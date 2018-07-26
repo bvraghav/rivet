@@ -1,0 +1,191 @@
+#+TITLE: Test for =losses.py=
+#+PROPERTY: header-args:ipython :session "/home/bvr/tmp/kernel-dp-ssh.json" :results output replace verbatim
+
+* Basic imports
+#+BEGIN_SRC ipython :var PYPATH=(file-truename (directory-file-name (file-name-directory (directory-file-name default-directory))))
+  import logging as lg
+  lg.basicConfig(level=lg.DEBUG, format="%(levelname)-8s: %(message)s")
+
+  import sys
+  import os
+
+  PYPATH = PYPATH.replace('/svr/dp', '')
+  lg.info(PYPATH)
+  sys.path.append(PYPATH)
+  lg.info(sys.path)
+
+  import losses
+#+END_SRC
+
+#+RESULTS:
+: INFO    : /home/bvr/code/rivet
+: INFO    : ['', '/usr/lib/python36.zip', '/usr/lib/python3.6', '/usr/lib/python3.6/lib-dynload', '/home/bvr/.local/lib/python3.6/site-packages', '/usr/lib/python3.6/site-packages', '/home/bvr/.local/lib/python3.6/site-packages/IPython/extensions', '/home/bvr/.ipython', '/home/bvr/code/rivet']
+
+* Losses to test
+
+** DistancePowerN
+
+#+BEGIN_SRC ipython
+  import torch
+
+  loss = losses.DistancePowerN(power=2)
+
+  x = torch.rand(3).unsqueeze(0)
+  y = torch.rand(3).unsqueeze(0)
+
+  lg.info(x)
+  lg.info(y)
+
+  z = loss(x, y)
+  lg.info(z)
+
+  z_cross = torch.sum(torch.pow(x-y, 2))
+  lg.info(z_cross)
+#+END_SRC
+
+#+RESULTS:
+: INFO    : tensor([[ 0.5082,  0.6527,  0.8360]])
+: INFO    : tensor([[ 0.0310,  0.0266,  0.9457]])
+: INFO    : tensor([ 0.6318])
+: INFO    : tensor(0.6318)
+
+** ContrastiveLoss
+
+#+BEGIN_SRC ipython
+  import torch
+
+  loss = losses.ContrastiveLoss(margin=1.)
+
+  x = torch.rand(1, 3) * 2 - 1
+  lg.info(x)
+
+  y = torch.rand(1, 3) * 2 - 1
+  lg.info(y)
+
+  labels = (torch.rand(1, 1) > 0.5).float()
+
+  z = loss((x, y), labels)
+  lg.info(z)
+
+  dist_xy = losses.DistancePowerN()(x, y)
+  z_cross = (1 - labels) * dist_xy + (labels) * (torch.clamp(1 - dist_xy, min=0.))
+  lg.info(z_cross)
+#+END_SRC
+
+#+RESULTS:
+: INFO    : tensor([[ 0.9150,  0.4054, -0.9877]])
+: INFO    : tensor([[ 0.5263,  0.5346,  0.8035]])
+: INFO    : tensor(0.)
+: INFO    : tensor([[ 0.]])
+
+** JSDivLoss
+
+#+BEGIN_SRC ipython
+  import torch
+  import torch.nn.functional as F
+
+  loss = losses.JSDivLoss()
+
+  x = torch.rand(1, 3)
+  lg.info(x)
+
+  y = torch.rand(1, 3)
+  lg.info(y)
+
+  z = loss(x, y)
+  lg.info(z)
+
+  xy = 0.5 * (x + y)
+  z_cross = F.kl_div(x, xy) + F.kl_div(y, xy)
+  lg.info(z_cross)
+
+#+END_SRC
+
+#+RESULTS:
+: INFO    : tensor([[ 0.3533,  0.6031,  0.9713]])
+: INFO    : tensor([[ 0.8580,  0.7238,  0.0621]])
+: INFO    : tensor(-1.3274)
+: INFO    : tensor(-1.3274)
+
+*** TODO Why is JS Divergence negative? Investigate!
+
+** TripletLoss
+
+#+BEGIN_SRC ipython
+  import torch
+
+  mu=1.
+  loss = losses.TripletLoss(margin=mu)
+
+  x = torch.rand(1, 3) * 2 - 1
+  lg.info(x)
+
+  y = torch.rand(1, 3) * 2 - 1
+  lg.info(y)
+
+  z = torch.rand(1, 3) * 2 - 1
+  lg.info(z)
+
+  l = loss((x, y, z))
+  lg.info(l)
+
+  dist_xy = losses.DistancePowerN()(x, y)
+  dist_xz = losses.DistancePowerN()(x, z)
+  l_cross = dist_xy + torch.clamp(mu - dist_xz, min=0.)
+  lg.info(l_cross)
+#+END_SRC
+
+#+RESULTS:
+: INFO    : tensor([[-0.5439, -0.8937,  0.9892]])
+: INFO    : tensor([[-0.0168, -0.0947,  0.1039]])
+: INFO    : tensor([[ 0.7303,  0.8199,  0.7753]])
+: INFO    : tensor(1.7000)
+: INFO    : tensor([ 1.7000])
+
+** BCETripletLoss
+
+#+BEGIN_SRC ipython
+  import torch
+
+  loss = losses.BCETripletLoss(cuda=False)
+
+  x = torch.rand(4, 2)
+  lg.info(x)
+
+  y = torch.rand(4, 2)
+  lg.info(y)
+
+  with torch.no_grad() :
+    lbl_pos = torch.FloatTensor([1, 0])
+    lbl_neg = torch.FloatTensor([0, 1])
+
+  lbl_pos = lbl_pos.repeat(4, 1)
+  lbl_neg = lbl_neg.repeat(4, 1)
+
+  l = loss((x, y))
+  lg.info(l)
+
+  bce_xy = torch.nn.BCELoss()(x, lbl_pos)
+  bce_xz = torch.nn.BCELoss()(y, lbl_neg)
+  l_cross = bce_xy + bce_xz
+  lg.info(l_cross)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+INFO    : tensor([[ 0.6870,  0.1950],
+        [ 0.3663,  0.3452],
+        [ 0.8528,  0.8703],
+        [ 0.0252,  0.2575]])
+INFO    : tensor([[ 0.5166,  0.2445],
+        [ 0.8043,  0.1430],
+        [ 0.1307,  0.2734],
+        [ 0.1023,  0.2061]])
+DEBUG   : torch.Size([2, 4, 2])
+DEBUG   : torch.Size([4, 2])
+DEBUG   : torch.Size([4, 2])
+INFO    : tensor(2.1293)
+INFO    : tensor(2.1293)
+#+end_example
+
+
