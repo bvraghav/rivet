@@ -1,6 +1,8 @@
 import logging as lg
 lg.basicConfig(level=lg.INFO, format="%(levelname)-8s: %(message)s")
 
+import os
+
 from argparse import ArgumentParser as Parser
 
 import torch
@@ -18,10 +20,28 @@ import trainer
 ## Define parser
 parser = Parser()
 parser.add_argument('options_file')
+parser.add_argument('-L', '--log', action='store_false', help='Do not log to file.')
 args = parser.parse_args()
 
 ## Load options
 options = load_options(args.options_file)
+
+## Setup Saver
+saver = BvrSaver(options)
+lg.info("Saver Created: @%s", saver.options.save_location)
+
+## Setup Logger
+if args.log :
+  logger = lg.getLogger()
+  if not os.path.isdir(saver.options.save_location) :
+    os.makedirs(saver.options.save_location)
+  handler = lg.FileHandler(os.path.join(
+    saver.options.save_location,
+    'run.log'
+  ))
+  logger.addHandler(handler)
+
+## Log options
 lg.info(options)
 
 ## Data
@@ -94,7 +114,8 @@ lr_adjuster = lr_adjusters.get(
 ## Criterion
 distance_fn = {
   "euclidean" : losses.DistancePowerN,
-  "kldiv"     : torch.nn.KLDivLoss
+  "kldiv"     : torch.nn.KLDivLoss,
+  "jsdiv"     : losses.JSDivLoss
 }.get(
   options.criterion_params.get(
     "distance", "euclidean"
@@ -121,10 +142,6 @@ accuracy_transform = accuracy_transforms.get(
   options.accuracy_transform, None
 )(**options.accuracy_transform_params)
 accuracy = BvrAccuracy(transform=accuracy_transform)
-
-## Saver
-saver = BvrSaver(options)
-lg.info("Saver Created")
 
 ## Reporting
 reportrs = {
