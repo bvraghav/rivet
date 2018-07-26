@@ -20,6 +20,9 @@ def load_options(options_file) :
 
 
 class Identity(Module) :
+  def __init__(self) :
+    super().__init__()
+
   def forward(self, inputs) :
     return inputs
 
