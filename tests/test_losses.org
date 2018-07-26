@@ -2,7 +2,10 @@
 #+PROPERTY: header-args:ipython :session "/home/bvr/tmp/kernel-dp-ssh.json" :results output replace verbatim :exports both
 
 * Basic imports
-#+BEGIN_SRC ipython :var PYPATH=(file-truename (directory-file-name (file-name-directory (directory-file-name default-directory))))
+This was necessary for my testing. And for general usage, the last
+line =import losses= should be enough.
+
+#+BEGIN_SRC python :var PYPATH=(file-truename (directory-file-name (file-name-directory (directory-file-name default-directory))))
   import logging as lg
   lg.basicConfig(level=lg.DEBUG, format="%(levelname)-8s: %(message)s")
 
@@ -10,16 +13,14 @@
   import os
 
   PYPATH = PYPATH.replace('/svr/dp', '')
-  lg.info(PYPATH)
+  # lg.info(PYPATH)
   sys.path.append(PYPATH)
-  lg.info(sys.path)
+  # lg.info(sys.path)
 
   import losses
 #+END_SRC
 
 #+RESULTS:
-: INFO    : /home/bvr/code/rivet
-: INFO    : ['', '/usr/lib/python36.zip', '/usr/lib/python3.6', '/usr/lib/python3.6/lib-dynload', '/home/bvr/.local/lib/python3.6/site-packages', '/usr/lib/python3.6/site-packages', '/home/bvr/.local/lib/python3.6/site-packages/IPython/extensions', '/home/bvr/.ipython', '/home/bvr/code/rivet']
 
 * Losses to test
 
