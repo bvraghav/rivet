@@ -1,5 +1,5 @@
 #+TITLE: Test for =losses.py=
-#+PROPERTY: header-args:ipython :session "/home/bvr/tmp/kernel-dp-ssh.json" :results output replace verbatim
+#+PROPERTY: header-args:ipython :session "/home/bvr/tmp/kernel-dp-ssh.json" :results output replace verbatim :exports both
 
 * Basic imports
 #+BEGIN_SRC ipython :var PYPATH=(file-truename (directory-file-name (file-name-directory (directory-file-name default-directory))))
