@@ -136,6 +136,7 @@ class Create(object) :
     transform = transforms.get(transform, sketch_transform)()
 
     return self.base_module(adjacency, image_list, labels, transform)
+
 def flatten(inp_list) :
   return reduce(operator.concat, inp_list)
 def sketch_transform() :

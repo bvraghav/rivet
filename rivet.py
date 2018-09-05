@@ -72,6 +72,7 @@ network = {
 
 ## Create Model Pair/Triplet
 models = {
+  "identity"       : lambda x: x,
   "feature_pair"   : networks.pair_feat,
   "feature_triple" : networks.triple_feat,
   "concat_pair"    : networks.pair_concat,
